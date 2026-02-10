@@ -1,0 +1,38 @@
+###############################################################################
+# 밀도 테스트용 Pod 템플릿
+#
+# __INDEX__ 는 deploy_pods.sh에서 sed로 치환
+# busybox로 최소 워크로드 (파일 읽기, ls 등) 생성
+# compute-node-2에 배치
+###############################################################################
+apiVersion: v1
+kind: Pod
+metadata:
+  name: density-pod-__INDEX__
+  namespace: bench-density
+  labels:
+    app: density-bench
+    index: "__INDEX__"
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: compute-node-2
+  containers:
+    - name: workload
+      image: busybox:1.36
+      command: ["sh", "-c"]
+      args:
+        - |
+          while true; do
+            cat /proc/self/status > /dev/null 2>&1
+            ls /tmp > /dev/null 2>&1
+            sleep 5
+          done
+      resources:
+        requests:
+          cpu: "10m"
+          memory: "16Mi"
+        limits:
+          cpu: "50m"
+          memory: "32Mi"
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 0

@@ -1,0 +1,116 @@
+###############################################################################
+# 5.7 — ConfigMap + DaemonSet + workload Pod (클라이언트: compute-node-1)
+#
+# 아키텍처:
+#   compute-node-1 (클라이언트)
+#     ├── bpftrace DaemonSet — connect syscall 트레이싱
+#     └── workload Pod — lat_connect <서버IP> 실행
+#   compute-node-2 (서버)
+#     └── tcp-server Pod — bw_tcp -s (02-tcp-server-pod.yaml)
+#
+# 수정 사항 (v1 → v2):
+#   1) comm 필터: "lat_connect"만 캡처 (시스템 노이즈 제거)
+#   2) printf로 개별 delta(ns) 출력 → p50/p99 오프라인 계산
+#   3) hist()는 시각화용으로 유지
+#   4) 클라이언트(compute-node-1) ↔ 서버(compute-node-2) 분리
+###############################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bpftrace-scripts
+  namespace: bench-policy
+data:
+  trace_connect.bt: |
+    tracepoint:syscalls:sys_enter_connect / comm == "lat_connect" / {
+        @start[tid] = nsecs;
+    }
+    tracepoint:syscalls:sys_exit_connect / @start[tid] / {
+        $delta = nsecs - @start[tid];
+        printf("%llu\n", $delta);
+        @latency = hist($delta);
+        delete(@start[tid]);
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: bpftrace-tracer
+  namespace: bench-policy
+  labels:
+    app: bpftrace-tracer
+spec:
+  selector:
+    matchLabels:
+      app: bpftrace-tracer
+  template:
+    metadata:
+      labels:
+        app: bpftrace-tracer
+    spec:
+      hostPID: true
+      hostNetwork: true
+      nodeSelector:
+        kubernetes.io/hostname: compute-node-1
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: bpftrace
+          image: ubuntu:22.04
+          command: ["sleep", "infinity"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: results
+              mountPath: /results
+            - name: kernel-debug
+              mountPath: /sys/kernel/debug
+            - name: modules
+              mountPath: /lib/modules
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: bpftrace-scripts
+        - name: results
+          hostPath:
+            path: /tmp/2026SoCC/bench-5.7
+            type: DirectoryOrCreate
+        - name: kernel-debug
+          hostPath:
+            path: /sys/kernel/debug
+        - name: modules
+          hostPath:
+            path: /lib/modules
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: workload
+  namespace: bench-policy
+  labels:
+    app: workload
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: compute-node-1
+  containers:
+    - name: bench
+      image: ubuntu:22.04
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: tools
+          mountPath: /tools
+          readOnly: true
+        - name: results
+          mountPath: /results
+  volumes:
+    - name: tools
+      hostPath:
+        path: /opt/bench-tools
+        type: DirectoryOrCreate
+    - name: results
+      hostPath:
+        path: /tmp/2026SoCC/bench-5.7
+        type: DirectoryOrCreate

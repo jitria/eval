@@ -1,0 +1,116 @@
+###############################################################################
+# 리소스 모니터링 — ConfigMap + privileged DaemonSet (5.8 v2)
+#
+# compute-node-2에서 실행. hostPID=true로 호스트 /proc 접근.
+# 차분 기반 CPU 측정 (v1의 cumulative /proc/stat 문제 수정).
+###############################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitor-scripts
+  namespace: bench-density
+data:
+  monitor_in_pod.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+    POD_COUNT="${1:-0}"
+    AGENT_NAME="${2:-}"
+    INTERVAL="${3:-5}"
+    NUM_SAMPLES="${4:-12}"
+    OUTPUT="/results/${5:-monitor.csv}"
+    echo "timestamp,pod_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_mem_used_mb,node_mem_total_mb" > "${OUTPUT}"
+    AGENT_PID=""
+    if [[ -n "${AGENT_NAME}" ]]; then
+        AGENT_PID=$(pgrep -f "${AGENT_NAME}" 2>/dev/null | head -1 || true)
+        if [[ -n "${AGENT_PID}" ]]; then
+            echo "[monitor] agent PID: ${AGENT_PID} (${AGENT_NAME})"
+        else
+            echo "[monitor] agent not found: ${AGENT_NAME}"
+        fi
+    fi
+    NPROC=$(nproc 2>/dev/null || echo 1)
+    read_cpu_stat() { awk '/^cpu / {print $2,$3,$4,$5,$6,$7,$8,$9}' /proc/stat; }
+    read_agent_ticks() {
+        local pid="$1"
+        if [[ -n "$pid" && -f "/proc/$pid/stat" ]]; then
+            awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null || echo "0"
+        else echo "0"; fi
+    }
+    read_agent_mem_mb() {
+        local pid="$1"
+        if [[ -n "$pid" && -f "/proc/$pid/status" ]]; then
+            awk '/^VmRSS:/{printf "%.1f",$2/1024}' "/proc/$pid/status" 2>/dev/null || echo "0"
+        else echo "0"; fi
+    }
+    echo "[monitor] pods=${POD_COUNT}, agent=${AGENT_NAME:-none}, interval=${INTERVAL}s, samples=${NUM_SAMPLES}"
+    prev_stat=$(read_cpu_stat)
+    prev_agent=$(read_agent_ticks "${AGENT_PID}")
+    for ((s=1; s<=NUM_SAMPLES; s++)); do
+        sleep "${INTERVAL}"
+        ts=$(date +%Y-%m-%dT%H:%M:%S)
+        curr_stat=$(read_cpu_stat)
+        curr_agent=$(read_agent_ticks "${AGENT_PID}")
+        node_cpu=$(echo "${prev_stat}" "${curr_stat}" | awk '{
+            pt=$1+$2+$3+$4+$5+$6+$7+$8; ct=$9+$10+$11+$12+$13+$14+$15+$16
+            pi=$4+$5; ci=$12+$13; dt=ct-pt; di=ci-pi
+            if(dt>0) printf "%.1f",(dt-di)/dt*100; else printf "0.0"
+        }')
+        agent_cpu="0.00"
+        if [[ -n "${AGENT_PID}" ]]; then
+            agent_cpu=$(echo "${prev_agent}" "${curr_agent}" "${prev_stat}" "${curr_stat}" | awk '{
+                da=$2-$1; pt=$3+$4+$5+$6+$7+$8+$9+$10; ct=$11+$12+$13+$14+$15+$16+$17+$18
+                dt=ct-pt
+                if(dt>0) printf "%.2f",da/dt*100; else printf "0.00"
+            }')
+        fi
+        agent_mem=$(read_agent_mem_mb "${AGENT_PID}")
+        mem_info=$(awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{printf "%d %d",t/1024,(t-a)/1024}' /proc/meminfo 2>/dev/null||echo "0 0")
+        mem_total=${mem_info%% *}; mem_used=${mem_info##* }
+        echo "${ts},${POD_COUNT},${agent_cpu},${agent_mem},${node_cpu},${mem_used},${mem_total}" >> "${OUTPUT}"
+        prev_stat="${curr_stat}"; prev_agent="${curr_agent}"
+    done
+    echo "[monitor] done: ${NUM_SAMPLES} samples"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: resource-monitor
+  namespace: bench-density
+  labels:
+    app: resource-monitor
+spec:
+  selector:
+    matchLabels:
+      app: resource-monitor
+  template:
+    metadata:
+      labels:
+        app: resource-monitor
+    spec:
+      hostPID: true
+      hostNetwork: true
+      nodeSelector:
+        kubernetes.io/hostname: compute-node-2
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: monitor
+          image: ubuntu:22.04
+          command: ["sleep", "infinity"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: results
+              mountPath: /results
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: results
+          hostPath:
+            path: /tmp/2026SoCC/bench-5.8
+            type: DirectoryOrCreate
+        - name: scripts
+          configMap:
+            name: monitor-scripts
+            defaultMode: 0755

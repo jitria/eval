@@ -1,0 +1,33 @@
+###############################################################################
+# wrk2 클라이언트 Pod — compute-node-1에서 장기 실행
+# run_bench.sh에서 kubectl exec으로 반복 측정
+###############################################################################
+apiVersion: v1
+kind: Pod
+metadata:
+  name: wrk2-client
+  namespace: bench-nginx
+  labels:
+    app: wrk2-client
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: compute-node-1
+  containers:
+    - name: wrk2
+      image: ubuntu:22.04
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: tools
+          mountPath: /tools
+          readOnly: true
+        - name: results
+          mountPath: /results
+  volumes:
+    - name: tools
+      hostPath:
+        path: /opt/bench-tools
+        type: DirectoryOrCreate
+    - name: results
+      hostPath:
+        path: /tmp/2026SoCC/bench-5.6
+        type: DirectoryOrCreate

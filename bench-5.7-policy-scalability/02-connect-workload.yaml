@@ -1,0 +1,107 @@
+###############################################################################
+# connect 워크로드 Job (5.7)
+#
+# 같은 Pod 내 sidecar TCP 서버에 대해 connect syscall을 반복 호출
+# RULE_COUNT 환경변수: 현재 적용된 규칙 수 (결과 파일 이름에 사용)
+###############################################################################
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: connect-workload
+  namespace: bench-policy
+  labels:
+    app: connect-workload
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: connect-workload
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: compute-node-2
+      restartPolicy: Never
+      containers:
+        # ── TCP accept 서버 ──
+        - name: tcp-server
+          image: python:3.11-slim
+          command: ["python3", "-c"]
+          args:
+            - |
+              import socket, signal, sys
+              s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+              s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+              s.bind(('0.0.0.0', 18080))
+              s.listen(4096)
+              print('[server] listening on :18080', flush=True)
+              signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
+              while True:
+                  try:
+                      c, _ = s.accept()
+                      c.close()
+                  except:
+                      break
+          ports:
+            - containerPort: 18080
+
+        # ── connect 워크로드 ──
+        - name: workload
+          image: python:3.11-slim
+          command: ["python3", "-c"]
+          args:
+            - |
+              import socket, time, os
+
+              host = '127.0.0.1'
+              port = 18080
+              iterations = int(os.environ.get('ITERATIONS', '10000'))
+              rule_count = os.environ.get('RULE_COUNT', '0')
+              label = os.environ.get('LABEL', 'vanilla')
+              result_path = f'/results/{label}_rules{rule_count}_workload.log'
+
+              # 서버 준비 대기
+              for _ in range(30):
+                  try:
+                      s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                      s.connect((host, port))
+                      s.close()
+                      break
+                  except:
+                      time.sleep(1)
+
+              with open(result_path, 'w') as f:
+                  f.write(f'[workload] rules={rule_count}, connect x {iterations}\n')
+                  f.write(f'[workload] started at {time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())}\n')
+
+                  success = 0
+                  start = time.monotonic()
+                  for i in range(iterations):
+                      try:
+                          s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                          s.connect((host, port))
+                          s.close()
+                          success += 1
+                      except:
+                          pass
+                  elapsed = time.monotonic() - start
+                  rate = success / elapsed if elapsed > 0 else 0
+
+                  msg = f'[workload] done: rules={rule_count}, success={success}, elapsed={elapsed:.2f}s, rate={rate:.0f} conn/s\n'
+                  f.write(msg)
+                  f.write(f'[workload] finished at {time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())}\n')
+                  print(msg, end='')
+          env:
+            - name: ITERATIONS
+              value: "10000"
+            - name: RULE_COUNT
+              value: "0"
+            - name: LABEL
+              value: "vanilla"
+          volumeMounts:
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: results
+          hostPath:
+            path: /tmp/2026SoCC/bench-5.7
+            type: DirectoryOrCreate

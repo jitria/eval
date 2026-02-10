@@ -1,0 +1,29 @@
+###############################################################################
+# TCP 서버 Pod — compute-node-2 (서버) (5.7)
+#
+# lmbench bw_tcp -s 를 실행할 장기 실행 Pod.
+# 클라이언트(compute-node-1)가 이 서버의 Pod IP로 lat_connect 실행.
+###############################################################################
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tcp-server
+  namespace: bench-policy
+  labels:
+    app: tcp-server
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: compute-node-2
+  containers:
+    - name: server
+      image: ubuntu:22.04
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: tools
+          mountPath: /tools
+          readOnly: true
+  volumes:
+    - name: tools
+      hostPath:
+        path: /opt/bench-tools
+        type: DirectoryOrCreate

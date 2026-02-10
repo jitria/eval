@@ -1,0 +1,44 @@
+#!/usr/bin/env bpftrace
+/*
+ * trace_connect.bt — connect syscall 레이턴시 정밀 측정
+ *
+ * 정책 규칙 수에 따른 connect 오버헤드 측정용
+ * sys_enter(42) → sys_exit(42) delta 측정
+ *
+ * 사용법: sudo bpftrace trace_connect.bt
+ */
+
+BEGIN
+{
+    printf("Tracing connect() syscall latency... Ctrl-C to stop\n");
+    @count = (uint64)0;
+    @total_ns = (uint64)0;
+}
+
+tracepoint:raw_syscalls:sys_enter
+/ args.id == 42 /
+{
+    @start[tid] = nsecs;
+}
+
+tracepoint:raw_syscalls:sys_exit
+/ @start[tid] /
+{
+    $delta = nsecs - @start[tid];
+    @latency_ns = hist($delta);
+    @count++;
+    @total_ns = @total_ns + $delta;
+    delete(@start[tid]);
+}
+
+END
+{
+    printf("\n===== connect() latency =====\n");
+    print(@latency_ns);
+    printf("count: %llu\n", @count);
+    printf("total_ns: %llu\n", @total_ns);
+    if (@count > 0) {
+        printf("avg_ns: %llu\n", @total_ns / @count);
+    }
+    clear(@start);
+}
