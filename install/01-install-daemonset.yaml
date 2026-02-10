@@ -1,0 +1,153 @@
+###############################################################################
+# 벤치마크 도구 설치 DaemonSet
+#
+# 양쪽 노드(compute-node-1, compute-node-2)에 자동 배포
+# 컨테이너 내부에서 소스 빌드 → hostPath에 바이너리 복사
+#
+# hostPath 마운트:
+#   /opt/bench-tools → /opt/bench-tools (바이너리 + 소스)
+#   /tmp/2026SoCC    → /tmp/2026SoCC    (결과 디렉토리 생성)
+#
+# 완료 후 Pod는 Completed 상태로 유지 (DaemonSet 대신 Job 사용 불가하므로
+# 완료 후 sleep infinity로 대기, 확인 후 수동 삭제)
+###############################################################################
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: bench-installer
+  namespace: bench-install
+  labels:
+    app: bench-installer
+spec:
+  selector:
+    matchLabels:
+      app: bench-installer
+  template:
+    metadata:
+      labels:
+        app: bench-installer
+    spec:
+      # 모든 노드에 배포 (nodeSelector 없음)
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: installer
+          image: ubuntu:22.04
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              INSTALL_DIR="/opt/bench-tools"
+              SRC_DIR="${INSTALL_DIR}/src"
+              BIN_DIR="${INSTALL_DIR}/bin"
+              RESULT_DIR="/tmp/2026SoCC"
+
+              log()  { echo -e "\e[1;32m[+]\e[0m $*"; }
+              warn() { echo -e "\e[1;33m[!]\e[0m $*"; }
+
+              # ── 이미 설치 완료 확인 ──
+              if [ -f "${BIN_DIR}/lat_syscall" ] && [ -f "${BIN_DIR}/wrk" ]; then
+                  log "이미 설치 완료. 건너뜀"
+                  log "lat_syscall: $(ls -la ${BIN_DIR}/lat_syscall)"
+                  log "wrk: $(ls -la ${BIN_DIR}/wrk)"
+                  # 결과 디렉토리만 확인
+                  mkdir -p ${RESULT_DIR}/{bench-5.5,bench-5.6,bench-5.7,bench-5.8}
+                  chmod -R 777 ${RESULT_DIR}
+                  log "설치 완료 상태. 대기 중..."
+                  sleep infinity
+              fi
+
+              # ── 빌드 의존성 설치 ──
+              log "빌드 의존성 설치"
+              apt-get update -qq
+              apt-get install -y -qq \
+                  build-essential git wget curl \
+                  libssl-dev zlib1g-dev \
+                  pkg-config \
+                  > /dev/null 2>&1
+              log "의존성 설치 완료"
+
+              mkdir -p "${SRC_DIR}" "${BIN_DIR}"
+
+              # ── lmbench 빌드 ──
+              if [ ! -f "${BIN_DIR}/lat_syscall" ]; then
+                  log "lmbench 소스 빌드 시작"
+                  cd "${SRC_DIR}"
+                  if [ ! -d lmbench ]; then
+                      git clone https://github.com/intel/lmbench.git
+                  fi
+                  cd lmbench
+                  make -j$(nproc) 2>&1 | tail -5
+
+                  # 바이너리 탐색 및 복사
+                  BIN_SRC=""
+                  for candidate in "bin/x86_64-linux-gnu" "bin/$(uname -m)-linux-gnu" "bin/$(uname -m)" "bin"; do
+                      if [ -f "${candidate}/lat_syscall" ]; then
+                          BIN_SRC="${candidate}"
+                          break
+                      fi
+                  done
+                  if [ -z "${BIN_SRC}" ]; then
+                      BIN_SRC=$(dirname "$(find . -name lat_syscall -type f | head -1)" 2>/dev/null || true)
+                  fi
+
+                  if [ -n "${BIN_SRC}" ]; then
+                      for bin in lat_syscall lat_proc lat_connect bw_tcp lat_tcp; do
+                          [ -f "${BIN_SRC}/${bin}" ] && cp -v "${BIN_SRC}/${bin}" "${BIN_DIR}/"
+                      done
+                      log "lmbench 바이너리 → ${BIN_DIR}/"
+                  else
+                      warn "lmbench 빌드 실패 - lat_syscall 을 찾을 수 없음"
+                  fi
+              else
+                  log "lmbench 이미 빌드됨"
+              fi
+
+              # ── wrk2 빌드 ──
+              if [ ! -f "${BIN_DIR}/wrk" ]; then
+                  log "wrk2 소스 빌드 시작"
+                  cd "${SRC_DIR}"
+                  if [ ! -d wrk2 ]; then
+                      git clone https://github.com/giltene/wrk2.git
+                  fi
+                  cd wrk2
+                  make -j$(nproc) 2>&1 | tail -5
+                  cp -v wrk "${BIN_DIR}/wrk"
+                  log "wrk2 바이너리 → ${BIN_DIR}/wrk"
+              else
+                  log "wrk2 이미 빌드됨"
+              fi
+
+              # ── 결과 디렉토리 생성 ──
+              mkdir -p ${RESULT_DIR}/{bench-5.5,bench-5.6,bench-5.7,bench-5.8}
+              chmod -R 777 ${RESULT_DIR}
+              log "결과 디렉토리 생성: ${RESULT_DIR}/"
+
+              # ── 완료 ──
+              log "===== 설치 완료 ====="
+              log "바이너리 목록:"
+              ls -la "${BIN_DIR}/"
+              log "설치 완료. 대기 중..."
+              sleep infinity
+          volumeMounts:
+            - name: bench-tools
+              mountPath: /opt/bench-tools
+            - name: results
+              mountPath: /tmp/2026SoCC
+          resources:
+            requests:
+              cpu: "1"
+              memory: "1Gi"
+            limits:
+              cpu: "4"
+              memory: "2Gi"
+      volumes:
+        - name: bench-tools
+          hostPath:
+            path: /opt/bench-tools
+            type: DirectoryOrCreate
+        - name: results
+          hostPath:
+            path: /tmp/2026SoCC
+            type: DirectoryOrCreate
