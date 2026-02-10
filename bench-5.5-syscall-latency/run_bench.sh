@@ -65,6 +65,48 @@ tracer_exec() { kubectl -n "${NS}" exec "${TRACER_POD}" -- bash -c "$1" 2>&1; }
 work_exec()   { kubectl -n "${NS}" exec "${WORKLOAD_POD}" -- bash -c "$1" 2>&1; }
 server_exec() { kubectl -n "${NS}" exec "${SERVER_POD}" -- bash -c "$1" 2>&1; }
 
+# ── 정책 적용/제거 ─────────────────────────────────────────────────
+apply_policy() {
+    [[ "${LABEL}" == "vanilla" ]] && return
+    log "정책 적용 (${LABEL})"
+    case "${LABEL}" in
+        kloudknox)
+            kubectl apply -f "${SCRIPT_DIR}/policies/kloudknox-policy.yaml"
+            sleep 3
+            ;;
+        falco)
+            helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+                --set-file "customRules.bench-rules\.yaml=${SCRIPT_DIR}/policies/falco-rules.yaml" \
+                --wait --timeout 120s 2>&1 || true
+            sleep 5
+            ;;
+        tetragon)
+            kubectl apply -f "${SCRIPT_DIR}/policies/tetragon-policy.yaml"
+            sleep 3
+            ;;
+    esac
+    log "정책 적용 완료"
+}
+
+remove_policy() {
+    [[ "${LABEL}" == "vanilla" ]] && return
+    log "정책 제거 (${LABEL})"
+    case "${LABEL}" in
+        kloudknox)
+            kubectl delete -f "${SCRIPT_DIR}/policies/kloudknox-policy.yaml" --ignore-not-found 2>/dev/null || true
+            ;;
+        falco)
+            helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+                --set "customRules.bench-rules\\.yaml=" \
+                --wait --timeout 120s 2>/dev/null || true
+            ;;
+        tetragon)
+            kubectl delete -f "${SCRIPT_DIR}/policies/tetragon-policy.yaml" --ignore-not-found 2>/dev/null || true
+            ;;
+    esac
+    log "정책 제거 완료"
+}
+
 # ── CPU pinning 설정 ─────────────────────────────────────────────────
 setup_cpu_pin() {
     if work_exec "taskset -c ${PIN_CORE} echo ok" &>/dev/null; then
@@ -256,6 +298,9 @@ do_run() {
     # CPU pinning
     setup_cpu_pin
 
+    # 정책 적용
+    apply_policy
+
     # 시스템 정보
     tracer_exec "{ uname -a; lscpu | head -20; free -h; } > /results/${LABEL}_sysinfo.txt"
 
@@ -385,6 +430,7 @@ echo 'warm-up done'
 # ── cleanup ──────────────────────────────────────────────────────────
 do_cleanup() {
     log "정리"
+    remove_policy
     kubectl delete namespace "${NS}" --ignore-not-found --grace-period=5
     log "완료"
 }

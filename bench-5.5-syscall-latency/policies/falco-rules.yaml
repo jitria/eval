@@ -39,7 +39,7 @@
   condition: >
     evt.type = connect
     and container.id != host
-    and fd.typechar = 4
+    and fd.type = ipv4
   output: >
     Network connect
     (user=%user.name command=%proc.cmdline dest=%fd.sip:%fd.sport

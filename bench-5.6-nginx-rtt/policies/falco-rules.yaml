@@ -1,8 +1,13 @@
 ###############################################################################
 # Falco Rules — 5.6 Nginx RTT
 #
-# Nginx 컨테이너의 네트워크 및 프로세스 활동을 Falco가 감시.
-# HTTP 워크로드 처리 중 이벤트 평가 오버헤드 측정.
+# Nginx 컨테이너의 네트워크 연결, 프로세스 실행, 파일 접근을 감시.
+# KloudKnox/Tetragon과 동일한 3개 카테고리로 공정한 비교.
+#
+# 카테고리:
+#   1) 네트워크: accept/accept4 (inbound) + connect (outbound)
+#   2) 프로세스: execve/execveat
+#   3) 파일: open/openat/openat2
 #
 # 적용:
 #   helm upgrade falco falcosecurity/falco -n falco --reuse-values \
@@ -21,17 +26,17 @@
   priority: NOTICE
   tags: [bench, nginx-rtt]
 
-- rule: Bench Nginx Network Activity
-  desc: Audit all network syscalls from Nginx containers
+- rule: Bench Nginx Outbound Connection
+  desc: Audit outbound connections from Nginx containers
   condition: >
-    evt.type in (sendto, recvfrom, sendmsg, recvmsg, read, write, writev)
+    evt.type = connect
     and container.id != host
-    and fd.typechar = 4
-    and (fd.sport = 80 or fd.dport = 80)
+    and k8s.ns.name = bench-nginx
+    and fd.type = ipv4
   output: >
-    Nginx network I/O
-    (type=%evt.type bytes=%evt.rawarg.res command=%proc.cmdline
-     container=%container.name)
+    Nginx outbound connection
+    (user=%user.name command=%proc.cmdline dest=%fd.sip:%fd.sport
+     container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, nginx-rtt]
 
@@ -44,5 +49,18 @@
   output: >
     Process in Nginx namespace
     (user=%user.name command=%proc.cmdline container=%container.name)
+  priority: NOTICE
+  tags: [bench, nginx-rtt]
+
+- rule: Bench Nginx File Access
+  desc: Audit file access in Nginx containers
+  condition: >
+    evt.type in (open, openat, openat2)
+    and container.id != host
+    and k8s.ns.name = bench-nginx
+  output: >
+    File access in Nginx namespace
+    (user=%user.name file=%fd.name command=%proc.cmdline
+     container=%container.name)
   priority: NOTICE
   tags: [bench, nginx-rtt]

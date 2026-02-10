@@ -43,6 +43,48 @@ warn() { echo -e "\e[1;33m[5.6]\e[0m $*"; }
 
 wrk_exec() { kubectl -n "${NS}" exec "${WRK_POD}" -- bash -c "$1" 2>&1; }
 
+# ── 정책 적용/제거 ─────────────────────────────────────────────────
+apply_policy() {
+    [[ "${LABEL}" == "vanilla" ]] && return
+    log "정책 적용 (${LABEL})"
+    case "${LABEL}" in
+        kloudknox)
+            kubectl apply -f "${SCRIPT_DIR}/policies/kloudknox-policy.yaml"
+            sleep 3
+            ;;
+        falco)
+            helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+                --set-file "customRules.bench-rules\.yaml=${SCRIPT_DIR}/policies/falco-rules.yaml" \
+                --wait --timeout 120s 2>&1 || true
+            sleep 5
+            ;;
+        tetragon)
+            kubectl apply -f "${SCRIPT_DIR}/policies/tetragon-policy.yaml"
+            sleep 3
+            ;;
+    esac
+    log "정책 적용 완료"
+}
+
+remove_policy() {
+    [[ "${LABEL}" == "vanilla" ]] && return
+    log "정책 제거 (${LABEL})"
+    case "${LABEL}" in
+        kloudknox)
+            kubectl delete -f "${SCRIPT_DIR}/policies/kloudknox-policy.yaml" --ignore-not-found 2>/dev/null || true
+            ;;
+        falco)
+            helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+                --set "customRules.bench-rules\\.yaml=" \
+                --wait --timeout 120s 2>/dev/null || true
+            ;;
+        tetragon)
+            kubectl delete -f "${SCRIPT_DIR}/policies/tetragon-policy.yaml" --ignore-not-found 2>/dev/null || true
+            ;;
+    esac
+    log "정책 제거 완료"
+}
+
 # ── wrk2 출력 파싱 (단위 → μs 정규화) ───────────────────────────────
 # 입력: wrk2 --latency 출력 파일
 # 출력: p50_us,p75_us,p90_us,p99_us,p999_us,mean_us,actual_rps,total_reqs,transfer_kbps,errors,saturated
@@ -161,6 +203,9 @@ do_run() {
     do_deploy
     mkdir -p "${RESULT_HOST}"
 
+    # 정책 적용
+    apply_policy
+
     # 서버 연결 확인 (최대 30초 대기)
     log "서버 연결 확인..."
     local connected=false
@@ -252,6 +297,7 @@ do_run() {
 # ── cleanup ──────────────────────────────────────────────────────────
 do_cleanup() {
     log "전체 정리"
+    remove_policy
     kubectl delete namespace "${NS}" --ignore-not-found --grace-period=5
     log "정리 완료"
 }

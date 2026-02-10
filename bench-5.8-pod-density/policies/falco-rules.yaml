@@ -3,7 +3,12 @@
 #
 # 밀도 Pod에 대한 일반적인 보안 모니터링 규칙.
 # Pod 수 증가에 따른 Falco의 CPU/Memory 오버헤드를 측정.
-# 실제 운영 환경에서의 전형적인 탐지 규칙 구성을 반영.
+# KloudKnox/Tetragon과 동일한 3개 카테고리로 공정한 비교.
+#
+# 카테고리:
+#   1) 프로세스: execve/execveat
+#   2) 파일: open/openat (sensitive paths)
+#   3) 네트워크: connect (outbound) + accept/accept4 (inbound)
 #
 # 적용:
 #   helm upgrade falco falcosecurity/falco -n falco --reuse-values \
@@ -34,12 +39,12 @@
   priority: NOTICE
   tags: [bench, pod-density]
 
-- rule: Bench Density Network Connection
+- rule: Bench Density Outbound Connection
   desc: Audit outbound network connections from density pods
   condition: >
     evt.type = connect
     and container.id != host
-    and fd.typechar = 4
+    and fd.type = ipv4
   output: >
     Network connect from density pod
     (user=%user.name command=%proc.cmdline dest=%fd.sip:%fd.sport
@@ -47,14 +52,14 @@
   priority: NOTICE
   tags: [bench, pod-density]
 
-- rule: Bench Density Container Lifecycle
-  desc: Audit container start/stop events
+- rule: Bench Density Inbound Connection
+  desc: Audit inbound network connections to density pods
   condition: >
-    evt.type in (clone, clone3)
+    evt.type in (accept, accept4)
     and container.id != host
   output: >
-    Container lifecycle event
-    (user=%user.name command=%proc.cmdline
-     container=%container.name ns=%k8s.ns.name)
+    Network accept in density pod
+    (user=%user.name command=%proc.cmdline client=%fd.cip:%fd.cport
+     container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, pod-density]
