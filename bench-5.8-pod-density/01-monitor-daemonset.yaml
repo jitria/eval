@@ -21,7 +21,10 @@ data:
     echo "timestamp,pod_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_mem_used_mb,node_mem_total_mb" > "${OUTPUT}"
     AGENT_PID=""
     if [[ -n "${AGENT_NAME}" ]]; then
-        AGENT_PID=$(pgrep -f "${AGENT_NAME}" 2>/dev/null | head -1 || true)
+        AGENT_PID=$(pgrep -x "${AGENT_NAME}" 2>/dev/null | head -1 || true)
+        if [[ -z "${AGENT_PID}" ]]; then
+            AGENT_PID=$(pgrep -f "/${AGENT_NAME}" 2>/dev/null | head -1 || true)
+        fi
         if [[ -n "${AGENT_PID}" ]]; then
             echo "[monitor] agent PID: ${AGENT_PID} (${AGENT_NAME})"
         else

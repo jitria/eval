@@ -19,7 +19,7 @@
 #   └── (KloudKnox agent, if applicable)
 #
 # 사용법:
-#   bash run_bench.sh run   [vanilla|kloudknox] [agent_process_name]
+#   bash run_bench.sh run   [vanilla|kloudknox|falco|tetragon] [agent_process_name]
 #   bash run_bench.sh deploy
 #   bash run_bench.sh cleanup
 ###############################################################################
@@ -30,6 +30,15 @@ NS="bench-density"
 RESULT_HOST="/tmp/2026SoCC/bench-5.8"
 LABEL="${2:-vanilla}"
 AGENT_NAME="${3:-}"
+
+# 에이전트 프로세스명 자동 매핑 (명시적 지정이 없을 때)
+if [[ -z "${AGENT_NAME}" ]]; then
+    case "${LABEL}" in
+        kloudknox) AGENT_NAME="kloudknox" ;;
+        falco)     AGENT_NAME="falco" ;;
+        tetragon)  AGENT_NAME="tetragon" ;;
+    esac
+fi
 
 POD_STEPS="${POD_STEPS:-1 10 20 30 50 70 100 110}"
 TRIALS="${TRIALS:-3}"
@@ -259,7 +268,7 @@ case "${1:-help}" in
     cleanup) do_cleanup ;;
     *)
         echo "사용법:"
-        echo "  bash $0 run [vanilla|kloudknox] [agent_name]"
+        echo "  bash $0 run [vanilla|kloudknox|falco|tetragon] [agent_name]"
         echo "  bash $0 deploy"
         echo "  bash $0 cleanup"
         echo ""

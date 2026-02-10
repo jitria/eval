@@ -1,0 +1,48 @@
+###############################################################################
+# Falco Rules — 5.5 Syscall Latency
+#
+# execve, openat, connect syscall을 Falco가 감시하도록 커스텀 룰 정의.
+# 모든 컨테이너 대상으로 이벤트 평가를 수행하여 오버헤드 측정.
+#
+# 적용:
+#   helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+#       --set-file "customRules.bench-rules\.yaml=falco-rules.yaml"
+# 또는 설치 시:
+#   bash deploy-falco.sh install-with-rules falco-rules.yaml
+###############################################################################
+- rule: Bench Syscall Execve Audit
+  desc: Audit all process executions in containers for syscall latency measurement
+  condition: >
+    evt.type in (execve, execveat)
+    and container.id != host
+  output: >
+    Process executed
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]
+
+- rule: Bench Syscall Openat Audit
+  desc: Audit all file open operations in containers for syscall latency measurement
+  condition: >
+    evt.type in (open, openat, openat2)
+    and container.id != host
+  output: >
+    File opened
+    (user=%user.name file=%fd.name command=%proc.cmdline
+     container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]
+
+- rule: Bench Syscall Connect Audit
+  desc: Audit all outbound network connections in containers for syscall latency measurement
+  condition: >
+    evt.type = connect
+    and container.id != host
+    and fd.typechar = 4
+  output: >
+    Network connect
+    (user=%user.name command=%proc.cmdline dest=%fd.sip:%fd.sport
+     container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]

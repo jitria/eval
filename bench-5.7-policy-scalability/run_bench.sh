@@ -27,7 +27,7 @@
 #       └── bw_tcp -s (TCP accept 서버)
 #
 # 사용법:
-#   bash run_bench.sh run   [vanilla|kloudknox]
+#   bash run_bench.sh run   [vanilla|kloudknox|falco|tetragon]
 #   bash run_bench.sh deploy
 #   bash run_bench.sh cleanup
 ###############################################################################
@@ -195,13 +195,32 @@ do_deploy() {
     log "서버 Pod IP: ${SERVER_IP} (compute-node-2)"
 
     # 규칙 파일 생성
-    log "규칙 세트 생성"
+    log "규칙 세트 생성 (${LABEL})"
     mkdir -p "${RESULT_HOST}/rules"
     for count in ${RULE_COUNTS}; do
-        python3 "${SCRIPT_DIR}/generate_rules.py" \
-            --count "${count}" \
-            --type mixed \
-            --output "${RESULT_HOST}/rules/rules_${count}.json"
+        case "${LABEL}" in
+            kloudknox)
+                python3 "${SCRIPT_DIR}/policies/generate_kloudknox_policies.py" \
+                    --count "${count}" \
+                    --namespace "${NS}" \
+                    --output "${RESULT_HOST}/rules/kloudknox_${count}.yaml"
+                ;;
+            falco)
+                python3 "${SCRIPT_DIR}/policies/generate_falco_rules.py" \
+                    --count "${count}" \
+                    --output "${RESULT_HOST}/rules/falco_${count}.yaml"
+                ;;
+            tetragon)
+                python3 "${SCRIPT_DIR}/policies/generate_tetragon_policies.py" \
+                    --count "${count}" \
+                    --output "${RESULT_HOST}/rules/tetragon_${count}.yaml"
+                ;;
+            *)
+                python3 "${SCRIPT_DIR}/generate_rules.py" \
+                    --count "${count}" --type mixed \
+                    --output "${RESULT_HOST}/rules/rules_${count}.json"
+                ;;
+        esac
     done
 
     log "Pod 배치 확인:"
@@ -218,6 +237,47 @@ flush_caches() {
     log "캐시 초기화 (drop_caches + sync)"
     tracer_exec 'sync && echo 3 > /proc/sys/vm/drop_caches' || true
     sleep 5
+}
+
+# ── 규칙 로드/언로드 ─────────────────────────────────────────────────
+load_rules() {
+    local count="$1"
+    case "${LABEL}" in
+        kloudknox)
+            log "  KloudKnox: ${count} 규칙 로드"
+            kubectl apply -f "${RESULT_HOST}/rules/kloudknox_${count}.yaml"
+            sleep 3
+            ;;
+        falco)
+            log "  Falco: ${count} 규칙 로드 (helm upgrade)"
+            helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+                --set-file "customRules.bench-rules\.yaml=${RESULT_HOST}/rules/falco_${count}.yaml" \
+                --wait --timeout 120s 2>&1 || true
+            sleep 5
+            ;;
+        tetragon)
+            log "  Tetragon: ${count} 규칙 로드"
+            kubectl apply -f "${RESULT_HOST}/rules/tetragon_${count}.yaml"
+            sleep 3
+            ;;
+    esac
+}
+
+unload_rules() {
+    local count="$1"
+    case "${LABEL}" in
+        kloudknox)
+            kubectl delete -f "${RESULT_HOST}/rules/kloudknox_${count}.yaml" --ignore-not-found 2>/dev/null || true
+            sleep 2
+            ;;
+        falco)
+            # 다음 load_rules에서 덮어쓰므로 별도 언로드 불필요
+            ;;
+        tetragon)
+            kubectl delete -f "${RESULT_HOST}/rules/tetragon_${count}.yaml" --ignore-not-found 2>/dev/null || true
+            sleep 2
+            ;;
+    esac
 }
 
 # ── 단일 측정 ────────────────────────────────────────────────────────
@@ -308,16 +368,9 @@ echo 'warm-up done'
     for rule_count in ${RULE_COUNTS}; do
         log "===== 규칙 수: ${rule_count} ====="
 
-        # KloudKnox 모드: 규칙 로드
-        if [[ "${LABEL}" == "kloudknox" ]]; then
-            local rule_file="${RESULT_HOST}/rules/rules_${rule_count}.json"
-            if command -v kloudknox-cli &>/dev/null; then
-                log "KloudKnox에 ${rule_count} 규칙 로드"
-                kloudknox-cli policy load --file "${rule_file}" 2>&1 || true
-                sleep 2
-            else
-                warn "kloudknox-cli 없음. 수동 로드 필요: ${rule_file}"
-            fi
+        # 규칙 로드 (vanilla 제외)
+        if [[ "${LABEL}" != "vanilla" ]]; then
+            load_rules "${rule_count}"
         fi
 
         for trial in $(seq 1 "${TRIALS}"); do
@@ -352,6 +405,11 @@ echo 'warm-up done'
                 sleep "${COOLDOWN}"
             fi
         done
+
+        # 규칙 언로드 (vanilla 제외)
+        if [[ "${LABEL}" != "vanilla" ]]; then
+            unload_rules "${rule_count}"
+        fi
 
         # rule_count 간 캐시 초기화
         flush_caches
@@ -394,7 +452,7 @@ case "${1:-help}" in
     cleanup) do_cleanup ;;
     *)
         echo "사용법:"
-        echo "  bash $0 run [vanilla|kloudknox]   # 전체 실행"
+        echo "  bash $0 run [vanilla|kloudknox|falco|tetragon]   # 전체 실행"
         echo "  bash $0 deploy                     # 인프라만 배포"
         echo "  bash $0 cleanup                    # 전체 정리"
         echo ""

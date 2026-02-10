@@ -1,0 +1,60 @@
+###############################################################################
+# Falco Rules — 5.8 Pod Density
+#
+# 밀도 Pod에 대한 일반적인 보안 모니터링 규칙.
+# Pod 수 증가에 따른 Falco의 CPU/Memory 오버헤드를 측정.
+# 실제 운영 환경에서의 전형적인 탐지 규칙 구성을 반영.
+#
+# 적용:
+#   helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+#       --set-file "customRules.bench-rules\.yaml=falco-rules.yaml"
+###############################################################################
+- rule: Bench Density Process Execution
+  desc: Audit process execution in density pods
+  condition: >
+    evt.type in (execve, execveat)
+    and container.id != host
+  output: >
+    Process executed in density pod
+    (user=%user.name command=%proc.cmdline
+     container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, pod-density]
+
+- rule: Bench Density Sensitive File Access
+  desc: Audit access to sensitive files in density pods
+  condition: >
+    evt.type in (open, openat, openat2)
+    and container.id != host
+    and (fd.name startswith /etc/ or fd.name startswith /proc/ or fd.name startswith /sys/)
+  output: >
+    Sensitive file access in density pod
+    (user=%user.name file=%fd.name command=%proc.cmdline
+     container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  tags: [bench, pod-density]
+
+- rule: Bench Density Network Connection
+  desc: Audit outbound network connections from density pods
+  condition: >
+    evt.type = connect
+    and container.id != host
+    and fd.typechar = 4
+  output: >
+    Network connect from density pod
+    (user=%user.name command=%proc.cmdline dest=%fd.sip:%fd.sport
+     container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  tags: [bench, pod-density]
+
+- rule: Bench Density Container Lifecycle
+  desc: Audit container start/stop events
+  condition: >
+    evt.type in (clone, clone3)
+    and container.id != host
+  output: >
+    Container lifecycle event
+    (user=%user.name command=%proc.cmdline
+     container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  tags: [bench, pod-density]

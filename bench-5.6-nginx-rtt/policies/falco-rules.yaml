@@ -1,0 +1,48 @@
+###############################################################################
+# Falco Rules — 5.6 Nginx RTT
+#
+# Nginx 컨테이너의 네트워크 및 프로세스 활동을 Falco가 감시.
+# HTTP 워크로드 처리 중 이벤트 평가 오버헤드 측정.
+#
+# 적용:
+#   helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+#       --set-file "customRules.bench-rules\.yaml=falco-rules.yaml"
+###############################################################################
+- rule: Bench Nginx Inbound Connection
+  desc: Audit inbound connections to Nginx containers
+  condition: >
+    evt.type in (accept, accept4)
+    and container.id != host
+    and fd.sport = 80
+  output: >
+    Nginx inbound connection
+    (client=%fd.cip:%fd.cport server=%fd.sip:%fd.sport
+     container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, nginx-rtt]
+
+- rule: Bench Nginx Network Activity
+  desc: Audit all network syscalls from Nginx containers
+  condition: >
+    evt.type in (sendto, recvfrom, sendmsg, recvmsg, read, write, writev)
+    and container.id != host
+    and fd.typechar = 4
+    and (fd.sport = 80 or fd.dport = 80)
+  output: >
+    Nginx network I/O
+    (type=%evt.type bytes=%evt.rawarg.res command=%proc.cmdline
+     container=%container.name)
+  priority: NOTICE
+  tags: [bench, nginx-rtt]
+
+- rule: Bench Nginx Process Audit
+  desc: Audit process activity in Nginx containers
+  condition: >
+    evt.type in (execve, execveat)
+    and container.id != host
+    and k8s.ns.name = bench-nginx
+  output: >
+    Process in Nginx namespace
+    (user=%user.name command=%proc.cmdline container=%container.name)
+  priority: NOTICE
+  tags: [bench, nginx-rtt]

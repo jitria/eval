@@ -1,0 +1,58 @@
+###############################################################################
+# KloudKnox Policy — 5.5 Syscall Latency
+#
+# workload Pod에서 발생하는 execve, openat, connect syscall을
+# KloudKnox가 모니터링하도록 Audit 정책 적용.
+# AppArmor + cgroup-BPF 경로에서의 오버헤드를 측정하기 위함.
+#
+# 적용: kubectl apply -f kloudknox-policy.yaml
+# 제거: kubectl delete -f kloudknox-policy.yaml
+###############################################################################
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-syscall-process-audit
+  namespace: bench-syscall
+spec:
+  selector:
+    app: workload
+  process:
+    - dir: /tools/bin/
+      recursive: false
+    - dir: /usr/bin/
+      recursive: false
+    - dir: /bin/
+      recursive: false
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-syscall-file-audit
+  namespace: bench-syscall
+spec:
+  selector:
+    app: workload
+  file:
+    - dir: /tmp/
+      recursive: true
+    - dir: /etc/
+      recursive: true
+    - dir: /dev/
+      recursive: false
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-syscall-network-audit
+  namespace: bench-syscall
+spec:
+  selector:
+    app: workload
+  network:
+    - direction: egress
+      ipBlock:
+        cidr: 10.244.0.0/16
+    - direction: ingress
+  action: Audit
