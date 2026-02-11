@@ -262,15 +262,20 @@ verify_policy() {
             fi
             ;;
         falco)
+            local fpod=""
             for _i in $(seq 1 30); do
-                if kubectl logs -n falco -l app.kubernetes.io/name=falco -c falco --since=60s 2>/dev/null \
-                    | grep -qi "Loading rules\|Loaded event"; then
+                fpod=$(kubectl -n falco get pods -l app.kubernetes.io/name=falco \
+                    --field-selector=status.phase=Running \
+                    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
+                if [[ -n "${fpod}" ]] && \
+                   kubectl -n falco exec "${fpod}" -c falco -- \
+                       test -s /etc/falco/rules.d/bench-rules.yaml 2>/dev/null; then
                     ok=true; break
                 fi
                 sleep 2
             done
-            [[ "${ok}" == "true" ]] && log "    Falco 룰 로딩 확인" \
-                || { warn "  Falco 룰 로딩 미확인"; return 1; }
+            [[ "${ok}" == "true" ]] && log "    Falco 커스텀 룰 마운트 확인 (${fpod})" \
+                || { warn "  Falco 룰 파일 미확인"; return 1; }
             ;;
         tetragon)
             for _i in $(seq 1 15); do
