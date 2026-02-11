@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.6 Nginx RTT (v2 - 개선판)
+# run_bench.sh — 5.6 Nginx RTT (v3 - 레이턴시 + 처리량)
 #
-# 개선 사항 (v1 → v2):
-#   1) 다중 trial: TRIALS 파라미터로 반복 측정 + 재현성 검증
-#   2) 워밍업: wrk2를 WARMUP_SEC초 동안 사전 실행
-#   3) wrk2 출력 파싱: awk 기반 단위 정규화 (ms/us/s → μs)
-#   4) cross-trial 통계: RPS×conn 조합별 avg/stddev 계산
-#   5) 쿨다운: 측정 간 COOLDOWN초 대기
-#   6) Pod 기반 클라이언트: Job 대신 장기 실행 Pod + kubectl exec
-#   7) 결과 전송: kubectl cp로 compute-node-1 → 마스터
+# 개선 사항 (v2 → v3):
+#   1) 처리량(Max RPS) 측정 추가: wrk closed-loop 모드
+#   2) 인라인 stddev 표시: per-trial 즉시 avg±stddev 출력
+#   3) 처리량 cross-trial avg±stddev
+#
+# 측정 모드:
+#   Phase 1 — 레이턴시: wrk2 -R (constant throughput, 고정 RPS에서 지연 측정)
+#   Phase 2 — 처리량:  wrk (closed-loop, 커넥션별 최대 RPS 측정)
 #
 # 아키텍처:
 #   Nginx (compute-node-2, Deployment + NodePort 30080)
@@ -261,6 +261,75 @@ compute_cross_trial_stats() {
     done
 }
 
+# ── wrk closed-loop 출력 파싱 (처리량 모드, -R 없음) ─────────────────
+# 출력: rps,p50_us,p75_us,p90_us,p99_us,lat_avg_us,lat_sd_us,total_reqs,transfer_kbps,errors
+parse_wrk_throughput() {
+    local file="$1"
+    [[ ! -f "${file}" || ! -s "${file}" ]] && { echo "0,0,0,0,0,0,0,0,0,0"; return; }
+
+    awk '
+    function to_us(val) {
+        if (val ~ /ms$/) { gsub(/ms$/, "", val); return val * 1000 }
+        if (val ~ /us$/) { gsub(/us$/, "", val); return val * 1 }
+        if (val ~ /s$/)  { gsub(/s$/,  "", val); return val * 1000000 }
+        return 0
+    }
+    function to_kbps(val) {
+        if (val ~ /GB$/) { gsub(/GB$/, "", val); return val * 1048576 }
+        if (val ~ /MB$/) { gsub(/MB$/, "", val); return val * 1024 }
+        if (val ~ /KB$/) { gsub(/KB$/, "", val); return val * 1 }
+        if (val ~ /B$/)  { gsub(/B$/,  "", val); return val / 1024 }
+        return 0
+    }
+    /^ *50%/  { p50  = to_us($2) }
+    /^ *75%/  { p75  = to_us($2) }
+    /^ *90%/  { p90  = to_us($2) }
+    /^ *99%/  { p99  = to_us($2) }
+    /^ *Latency/ && !/Distribution/ { lat_avg = to_us($2); lat_sd = to_us($3) }
+    /Requests\/sec:/  { rps = $2 }
+    /Transfer\/sec:/  { tput = to_kbps($2) }
+    /requests in/     { reqs = $1 }
+    /Socket errors:/ {
+        for (i = 1; i <= NF; i++) {
+            if ($i ~ /^[0-9]+$/ && $i+0 > 0) errs += $i+0
+        }
+    }
+    END {
+        printf "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%d\n",
+            rps+0, p50+0, p75+0, p90+0, p99+0, lat_avg+0, lat_sd+0, reqs+0, tput+0, errs+0
+    }
+    ' "${file}"
+}
+
+# ── 처리량 cross-trial 통계 ──────────────────────────────────────────
+compute_throughput_cross_trial_stats() {
+    local summary_csv="$1" stats_csv="$2"
+
+    echo "label,connections,duration,trials,avg_rps,std_rps,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_transfer_kbps,std_transfer_kbps" > "${stats_csv}"
+
+    for conns in ${CONN_LIST}; do
+        grep "^${LABEL},${conns},[0-9]*," "${summary_csv}" 2>/dev/null | awk -F',' \
+            -v label="${LABEL}" -v conns="${conns}" -v dur="${DURATION}" '
+        {
+            n++
+            srps += $4; sqrps += $4*$4
+            sp50 += $5; sqp50 += $5*$5
+            sp99 += $8; sqp99 += $8*$8
+            stput += $12; sqtput += $12*$12
+        }
+        END {
+            if (n == 0) exit
+            arps = srps/n; ap50 = sp50/n; ap99 = sp99/n; atput = stput/n
+            vrps = sqrps/n - arps*arps;   sdrps  = sqrt(vrps  > 0 ? vrps  : 0)
+            vp50 = sqp50/n - ap50*ap50;   sdp50  = sqrt(vp50  > 0 ? vp50  : 0)
+            vp99 = sqp99/n - ap99*ap99;   sdp99  = sqrt(vp99  > 0 ? vp99  : 0)
+            vtput = sqtput/n - atput*atput; sdtput = sqrt(vtput > 0 ? vtput : 0)
+            printf "%s,%s,%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
+                label, conns, dur, n, arps, sdrps, ap50, sdp50, ap99, sdp99, atput, sdtput
+        }' >> "${stats_csv}" || true
+    done
+}
+
 # ── deploy ───────────────────────────────────────────────────────────
 do_deploy() {
     log "배포 시작"
@@ -282,12 +351,36 @@ do_deploy() {
     log "deploy 완료"
 }
 
-# ── run ──────────────────────────────────────────────────────────────
-do_run() {
+# ── 공통 setup (deploy + 정책 + 연결확인 + 워밍업) ─────────────────
+do_setup() {
     do_deploy
     mkdir -p "${RESULT_HOST}"
+    apply_policy
 
-    # CDF Lua 스크립트 생성 (wrk2 done 콜백에서 percentile 6001 포인트 출력)
+    log "서버 연결 확인..."
+    local connected=false
+    for i in $(seq 1 30); do
+        if wrk_exec "/tools/bin/wrk -t1 -c1 -d1s -R1 ${SERVER_URL}" &>/dev/null; then
+            connected=true; break
+        fi
+        sleep 1
+    done
+    if [[ "${connected}" != "true" ]]; then
+        warn "서버 연결 실패 (30초 타임아웃)"; return 1
+    fi
+    log "서버 연결 확인 완료"
+
+    log "===== Warm-up (${WARMUP_SEC}초, RPS=5000, c=100) ====="
+    wrk_exec "/tools/bin/wrk -t${THREADS} -c100 -d${WARMUP_SEC}s -R5000 ${SERVER_URL} > /dev/null 2>&1" || true
+    log "Warm-up 완료"
+    sleep 5
+}
+
+# ── latency (wrk2 -R 고정 RPS에서 지연시간 측정) ─────────────────────
+do_latency() {
+    do_setup
+
+    # CDF Lua 스크립트 생성
     wrk_exec "cat > /tmp/cdf_report.lua << 'LUAEOF'
 done = function(summary, latency, requests)
     io.write(\"---CDF_START---\\n\")
@@ -300,107 +393,115 @@ done = function(summary, latency, requests)
 end
 LUAEOF"
 
-    # 정책 적용
-    apply_policy
-
-    # 서버 연결 확인 (최대 30초 대기)
-    log "서버 연결 확인..."
-    local connected=false
-    for i in $(seq 1 30); do
-        if wrk_exec "/tools/bin/wrk -t1 -c1 -d1s -R1 ${SERVER_URL}" &>/dev/null; then
-            connected=true
-            break
-        fi
-        sleep 1
-    done
-    if [[ "${connected}" != "true" ]]; then
-        warn "서버 연결 실패 (30초 타임아웃)"
-        return 1
-    fi
-    log "서버 연결 확인 완료"
-
-    # ── 워밍업 ────────────────────────────────────────────────────────
-    log "===== Warm-up (${WARMUP_SEC}초, RPS=5000, c=100) ====="
-    wrk_exec "/tools/bin/wrk -t${THREADS} -c100 -d${WARMUP_SEC}s -R5000 ${SERVER_URL} > /dev/null 2>&1" || true
-    log "Warm-up 완료"
-    sleep 5
-
-    # ── 결과 CSV 초기화 ───────────────────────────────────────────────
-    local summary="${RESULT_HOST}/${LABEL}_summary.csv"
+    local summary="${RESULT_HOST}/${LABEL}_latency.csv"
     echo "label,rps_target,connections,trial,duration,p50_us,p75_us,p90_us,p99_us,p999_us,mean_us,actual_rps,total_reqs,transfer_kbps,errors,saturated" > "${summary}"
 
-    # CDF 데이터 CSV (Lua 기반, ${CDF_POINTS}+1 포인트/run)
     local cdf_csv="${RESULT_HOST}/${LABEL}_cdf.csv"
     echo "label,rps_target,connections,trial,latency_us,percentile" > "${cdf_csv}"
 
-    # ── 측정 루프 ─────────────────────────────────────────────────────
     for trial in $(seq 1 "${TRIALS}"); do
-        log "===== Trial ${trial}/${TRIALS} ====="
-
+        log "===== Latency Trial ${trial}/${TRIALS} ====="
         for rps in ${RPS_LIST}; do
             for conns in ${CONN_LIST}; do
-                local tag="rps${rps}_conn${conns}_trial${trial}"
+                local tag="lat_rps${rps}_conn${conns}_trial${trial}"
                 local remote="/results/${LABEL}_${tag}.txt"
                 local local_f="${RESULT_HOST}/${LABEL}_${tag}.txt"
 
                 log "  RPS=${rps} CONNS=${conns}"
                 wrk_exec "/tools/bin/wrk -t${THREADS} -c${conns} -d${DURATION} -R${rps} --latency -s /tmp/cdf_report.lua ${SERVER_URL} > ${remote} 2>&1" || true
 
-                # 결과 파일 마스터로 전송
                 kubectl cp "${NS}/${WRK_POD}:${remote}" "${local_f}" 2>/dev/null || \
                     wrk_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
 
-                # 파싱 + CSV 추가
                 if [[ -f "${local_f}" && -s "${local_f}" ]]; then
                     local stats
                     stats=$(parse_wrk2_result "${local_f}" "${rps}")
                     echo "${LABEL},${rps},${conns},${trial},${DURATION},${stats}" >> "${summary}"
-
-                    # CDF 데이터 추출 (HdrHistogram spectrum 전체)
                     extract_cdf "${local_f}" "${cdf_csv}" "${LABEL}" "${rps}" "${conns}" "${trial}"
 
-                    # 화면에 p50/p99/throughput/포화 표시
-                    local p50_disp p99_disp mean_disp tput_disp sat_disp
-                    p50_disp=$(echo "${stats}" | cut -d, -f1)
-                    p99_disp=$(echo "${stats}" | cut -d, -f4)
-                    mean_disp=$(echo "${stats}" | cut -d, -f6)
-                    tput_disp=$(echo "${stats}" | cut -d, -f9)
-                    sat_disp=$(echo "${stats}" | cut -d, -f11)
-                    log "    p50=${p50_disp}μs  p99=${p99_disp}μs  mean=${mean_disp}μs  ${tput_disp}KB/s"
-                    if [[ "${sat_disp}" == "1" ]]; then
-                        warn "    *** SATURATED: actual_rps < 95% of target (${rps}) ***"
-                    fi
+                    local p50_d p99_d mean_d rps_d sat_d
+                    p50_d=$(echo "${stats}" | cut -d, -f1)
+                    p99_d=$(echo "${stats}" | cut -d, -f4)
+                    mean_d=$(echo "${stats}" | cut -d, -f6)
+                    rps_d=$(echo "${stats}" | cut -d, -f7)
+                    sat_d=$(echo "${stats}" | cut -d, -f11)
+                    log "    p50=${p50_d}μs  p99=${p99_d}μs  mean=${mean_d}μs  rps=${rps_d}"
+                    [[ "${sat_d}" == "1" ]] && warn "    *** SATURATED ***"
                 else
-                    warn "    결과 파일 없음 또는 비어있음"
+                    warn "    결과 없음"
                 fi
-
                 sleep "${COOLDOWN}"
             done
         done
     done
 
-    # ── cross-trial 통계 ──────────────────────────────────────────────
-    log "===== Cross-trial 통계 계산 ====="
-    local stats_csv="${RESULT_HOST}/${LABEL}_stats.csv"
+    log "===== Latency Cross-trial 통계 ====="
+    local stats_csv="${RESULT_HOST}/${LABEL}_latency_stats.csv"
     compute_cross_trial_stats "${summary}" "${stats_csv}"
 
-    # ── 결과 표시 ─────────────────────────────────────────────────────
     echo ""
-    log "===== Per-trial 요약 ====="
+    log "Per-trial:"
     column -t -s',' "${summary}" 2>/dev/null || cat "${summary}"
-
     echo ""
-    log "===== Cross-trial 통계 (avg ± stddev) ====="
+    log "Cross-trial (avg ± stddev):"
     column -t -s',' "${stats_csv}" 2>/dev/null || cat "${stats_csv}"
 
-    # ── CDF 데이터 요약 ─────────────────────────────────────────────
-    local cdf_lines
-    cdf_lines=$(( $(wc -l < "${cdf_csv}") - 1 ))
-    log "===== CDF 데이터: ${cdf_csv} (${cdf_lines} 포인트) ====="
+    local cdf_lines=$(( $(wc -l < "${cdf_csv}") - 1 ))
+    log "CDF: ${cdf_csv} (${cdf_lines} 포인트)"
+    echo ""
+    log "완료 (mode=latency, label=${LABEL}, trials=${TRIALS}, rps=[${RPS_LIST}], conns=[${CONN_LIST}])"
+}
+
+# ── throughput (wrk closed-loop, 커넥션별 최대 RPS 측정) ──────────────
+do_throughput() {
+    do_setup
+
+    local summary="${RESULT_HOST}/${LABEL}_throughput.csv"
+    echo "label,connections,trial,duration,rps,p50_us,p75_us,p90_us,p99_us,lat_avg_us,lat_sd_us,total_reqs,transfer_kbps,errors" > "${summary}"
+
+    for trial in $(seq 1 "${TRIALS}"); do
+        log "===== Throughput Trial ${trial}/${TRIALS} ====="
+        for conns in ${CONN_LIST}; do
+            local tag="tput_conn${conns}_trial${trial}"
+            local remote="/results/${LABEL}_${tag}.txt"
+            local local_f="${RESULT_HOST}/${LABEL}_${tag}.txt"
+
+            log "  CONNS=${conns} (max RPS)"
+            wrk_exec "/tools/bin/wrk -t${THREADS} -c${conns} -d${DURATION} --latency ${SERVER_URL} > ${remote} 2>&1" || true
+
+            kubectl cp "${NS}/${WRK_POD}:${remote}" "${local_f}" 2>/dev/null || \
+                wrk_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
+
+            if [[ -f "${local_f}" && -s "${local_f}" ]]; then
+                local stats
+                stats=$(parse_wrk_throughput "${local_f}")
+                echo "${LABEL},${conns},${trial},${DURATION},${stats}" >> "${summary}"
+
+                local rps_d p50_d p99_d sd_d
+                rps_d=$(echo "${stats}" | cut -d, -f1)
+                p50_d=$(echo "${stats}" | cut -d, -f2)
+                p99_d=$(echo "${stats}" | cut -d, -f5)
+                sd_d=$(echo "${stats}" | cut -d, -f7)
+                log "    RPS=${rps_d}  p50=${p50_d}μs  p99=${p99_d}μs  lat_sd=${sd_d}μs"
+            else
+                warn "    결과 없음"
+            fi
+            sleep "${COOLDOWN}"
+        done
+    done
+
+    log "===== Throughput Cross-trial 통계 ====="
+    local stats_csv="${RESULT_HOST}/${LABEL}_throughput_stats.csv"
+    compute_throughput_cross_trial_stats "${summary}" "${stats_csv}"
 
     echo ""
-    log "결과: ${RESULT_HOST}/"
-    log "완료 (label=${LABEL}, trials=${TRIALS}, duration=${DURATION}, rps=[${RPS_LIST}], conns=[${CONN_LIST}])"
+    log "Per-trial:"
+    column -t -s',' "${summary}" 2>/dev/null || cat "${summary}"
+    echo ""
+    log "Cross-trial (avg ± stddev):"
+    column -t -s',' "${stats_csv}" 2>/dev/null || cat "${stats_csv}"
+    echo ""
+    log "완료 (mode=throughput, label=${LABEL}, trials=${TRIALS}, conns=[${CONN_LIST}])"
 }
 
 # ── cleanup ──────────────────────────────────────────────────────────
@@ -418,22 +519,24 @@ do_cleanup() {
 }
 
 case "${1:-help}" in
-    run)     do_run ;;
-    deploy)  do_deploy ;;
-    cleanup) do_cleanup ;;
+    latency)    do_latency ;;
+    throughput) do_throughput ;;
+    deploy)     do_deploy ;;
+    cleanup)    do_cleanup ;;
     *)
         echo "사용법:"
-        echo "  bash $0 run [vanilla|kloudknox|falco|tetragon]"
-        echo "  bash $0 deploy"
-        echo "  bash $0 cleanup"
+        echo "  bash $0 latency    [vanilla|kloudknox|falco|tetragon]  # 지연시간 측정"
+        echo "  bash $0 throughput [vanilla|kloudknox|falco|tetragon]  # 처리량(Max RPS) 측정"
+        echo "  bash $0 deploy                                         # 인프라 배포"
+        echo "  bash $0 cleanup                                        # 전체 정리"
         echo ""
         echo "환경변수:"
         echo "  TRIALS=3          반복 횟수 (기본 3)"
         echo "  WARMUP_SEC=10     워밍업 시간 (기본 10초)"
-        echo "  DURATION=60s      wrk2 실행 시간 (기본 60초)"
-        echo "  THREADS=4         wrk2 스레드 수 (기본 4)"
+        echo "  DURATION=60s      측정 시간 (기본 60초)"
+        echo "  THREADS=4         wrk 스레드 수 (기본 4)"
         echo "  COOLDOWN=10       측정 간 쿨다운 (기본 10초)"
-        echo "  RPS_LIST='1000 5000 10000'       목표 RPS 리스트"
+        echo "  RPS_LIST='1000 5000 10000'       [latency] 목표 RPS 리스트"
         echo "  CONN_LIST='10 50 100 500 1000'   동시 연결 수 리스트"
         ;;
 esac

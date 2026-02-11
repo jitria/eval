@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.7 Policy Scalability (v3 - cross-node)
+# run_bench.sh — 5.7 Policy Scalability (v4 - 레이턴시 + 처리량 분리)
 #
-# 개선 사항 (v2 → v3):
-#   - loopback 제거: 클라이언트(compute-node-1) → 서버(compute-node-2)
-#     실제 네트워크 경로를 통해 connect → KloudKnox BPF 정책 룩업 실측
-#   - 서버 Pod IP를 자동 감지하여 lat_connect에 전달
+# 개선 사항 (v3 → v4):
+#   - latency/throughput 모드 분리
+#   - throughput: 규칙 수별 connect ops/sec 측정
+#   - 인라인 stddev 표시
 #
-# 기존 유지 (v2):
-#   1) lmbench lat_connect (5.5와 일관된 방법론)
-#   2) comm 필터: "lat_connect"만 캡처
-#   3) printf로 개별 ns 값 → p50/p99 오프라인 계산
-#   4) 다중 trial + cross-trial avg/stddev
-#   5) 워밍업, CPU pinning, IQR 필터링, drop_caches
-#   6) kubectl cp 결과 전송
+# 측정 모드:
+#   latency    — bpftrace로 connect syscall ns 단위 지연시간 (규칙 수별)
+#   throughput — lat_connect 반복 실행, 규칙 수별 ops/sec 측정
 #
 # 아키텍처:
 #   compute-node-1 (클라이언트)
@@ -27,7 +23,8 @@
 #       └── bw_tcp -s (TCP accept 서버)
 #
 # 사용법:
-#   bash run_bench.sh run   [vanilla|kloudknox|falco|tetragon]
+#   bash run_bench.sh latency    [vanilla|kloudknox|falco|tetragon]
+#   bash run_bench.sh throughput [vanilla|kloudknox|falco|tetragon]
 #   bash run_bench.sh deploy
 #   bash run_bench.sh cleanup
 ###############################################################################
@@ -42,6 +39,7 @@ WARMUP_SEC="${WARMUP_SEC:-30}"
 LMBENCH_REPS="${LMBENCH_REPS:-10}"
 PIN_CORE="${PIN_CORE:-2}"
 COOLDOWN="${COOLDOWN:-5}"
+TPUT_DURATION="${TPUT_DURATION:-10}"  # 처리량 측정 시간 (초)
 RULE_COUNTS="${RULE_COUNTS:-10 50 100 500 1000 5000}"
 
 log()  { echo -e "\e[1;36m[5.7]\e[0m $*"; }
@@ -379,42 +377,34 @@ fi
 ' || true
 }
 
-# ── run ──────────────────────────────────────────────────────────────
-do_run() {
+# ── 공통 setup ───────────────────────────────────────────────────────
+do_setup() {
     do_deploy
     TRACER_POD=$(get_tracer_pod)
     SERVER_IP=$(kubectl -n "${NS}" get pod tcp-server -o jsonpath='{.status.podIP}')
     mkdir -p "${RESULT_HOST}"
 
-    # CPU pinning
     setup_cpu_pin
-
-    # 시스템 정보
     tracer_exec "{ uname -a; lscpu | head -20; free -h; } > /results/${LABEL}_sysinfo.txt"
 
-    # TCP 서버 시작 (서버 Pod, compute-node-2)
     log "TCP 서버 시작 (bw_tcp -s on ${SERVER_IP})"
     server_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
     sleep 2
 
-    # 서버 연결 확인
     log "서버 연결 확인..."
     local connected=false
     for i in $(seq 1 30); do
         if work_exec "${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP} 2>/dev/null" &>/dev/null; then
-            connected=true
-            break
+            connected=true; break
         fi
         sleep 1
     done
     if [[ "${connected}" != "true" ]]; then
-        warn "서버 연결 실패 (${SERVER_IP}, 30초 타임아웃)"
-        return 1
+        warn "서버 연결 실패 (${SERVER_IP}, 30초 타임아웃)"; return 1
     fi
     log "서버 연결 확인 완료 (${SERVER_IP})"
 
-    # ── 워밍업 ────────────────────────────────────────────────────────
-    log "===== Warm-up (${WARMUP_SEC}초 동안 lat_connect ${SERVER_IP} 반복) ====="
+    log "===== Warm-up (${WARMUP_SEC}초) ====="
     work_exec "
 timeout ${WARMUP_SEC} bash -c '
 while true; do
@@ -425,30 +415,51 @@ echo 'warm-up done'
 "
     log "Warm-up 완료"
     flush_caches
+}
 
-    # ── 결과 CSV 초기화 ──────────────────────────────────────────────
-    local summary="${RESULT_HOST}/${LABEL}_summary.csv"
+# ── 처리량 cross-trial 통계 ──────────────────────────────────────────
+compute_throughput_cross_trial_stats() {
+    local summary_csv="$1" stats_csv="$2"
+
+    echo "label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_duration,std_duration" > "${stats_csv}"
+
+    for rc in ${RULE_COUNTS}; do
+        grep "^${LABEL},${rc},[0-9]*," "${summary_csv}" 2>/dev/null | awk -F',' \
+            -v label="${LABEL}" -v rc="${rc}" '
+        {
+            n++
+            sops += $4; sqops += $4*$4
+            sdur += $5; sqdur += $5*$5
+        }
+        END {
+            if (n == 0) exit
+            aops = sops/n; adur = sdur/n
+            vops = sqops/n - aops*aops; sdops = sqrt(vops > 0 ? vops : 0)
+            vdur = sqdur/n - adur*adur; sddur = sqrt(vdur > 0 ? vdur : 0)
+            printf "%s,%s,%d,%.1f,%.1f,%.2f,%.2f\n", label, rc, n, aops, sdops, adur, sddur
+        }' >> "${stats_csv}" || true
+    done
+}
+
+# ── latency (bpftrace로 connect ns 지연 측정, 규칙 수별) ──────────────
+do_latency() {
+    do_setup
+
+    local summary="${RESULT_HOST}/${LABEL}_latency.csv"
     echo "label,rule_count,trial,filter,avg_ns,p50_ns,p99_ns,min_ns,max_ns,count,stddev_ns" > "${summary}"
 
-    # ── 측정 루프 ────────────────────────────────────────────────────
     for rule_count in ${RULE_COUNTS}; do
-        log "===== 규칙 수: ${rule_count} ====="
-
-        # 규칙 로드 (vanilla 제외)
-        if [[ "${LABEL}" != "vanilla" ]]; then
-            load_rules "${rule_count}"
-        fi
+        log "===== [Latency] 규칙 수: ${rule_count} ====="
+        [[ "${LABEL}" != "vanilla" ]] && load_rules "${rule_count}"
 
         for trial in $(seq 1 "${TRIALS}"); do
             measure_one "${rule_count}" "${trial}"
 
-            # 결과 전송
             local remote="/results/${LABEL}_rules${rule_count}_trial${trial}.log"
             local local_f="${RESULT_HOST}/${LABEL}_rules${rule_count}_trial${trial}.log"
             kubectl cp "${NS}/${TRACER_POD}:${remote}" "${local_f}" 2>/dev/null || \
                 tracer_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
 
-            # 파싱 + CSV
             if [[ -f "${local_f}" && -s "${local_f}" ]]; then
                 local raw_stats iqr_stats
                 raw_stats=$(compute_stats "${local_f}" "raw")
@@ -456,53 +467,103 @@ echo 'warm-up done'
                 echo "${LABEL},${rule_count},${trial},raw,${raw_stats}" >> "${summary}"
                 echo "${LABEL},${rule_count},${trial},iqr,${iqr_stats}" >> "${summary}"
 
-                # 화면에 요약 표시
-                local p50 p99 cnt
-                p50=$(echo "${iqr_stats}" | cut -d, -f2)
-                p99=$(echo "${iqr_stats}" | cut -d, -f3)
-                cnt=$(echo "${iqr_stats}" | cut -d, -f6)
-                log "    rules=${rule_count} trial=${trial}: p50=${p50}ns  p99=${p99}ns  samples=${cnt}"
+                local i_avg i_p50 i_p99 i_cnt i_sd
+                i_avg=$(echo "${iqr_stats}" | cut -d, -f1)
+                i_p50=$(echo "${iqr_stats}" | cut -d, -f2)
+                i_p99=$(echo "${iqr_stats}" | cut -d, -f3)
+                i_cnt=$(echo "${iqr_stats}" | cut -d, -f6)
+                i_sd=$(echo "${iqr_stats}"  | cut -d, -f7)
+                log "    rules=${rule_count} trial=${trial}: avg=${i_avg}±${i_sd}ns  p50=${i_p50}ns  p99=${i_p99}ns  (n=${i_cnt})"
             else
-                warn "    결과 파일 없음 또는 비어있음"
+                warn "    결과 없음"
             fi
 
-            # trial 간 쿨다운
-            if [[ ${trial} -lt ${TRIALS} ]]; then
-                sleep "${COOLDOWN}"
-            fi
+            [[ ${trial} -lt ${TRIALS} ]] && sleep "${COOLDOWN}"
         done
 
-        # 규칙 언로드 (vanilla 제외)
-        if [[ "${LABEL}" != "vanilla" ]]; then
-            unload_rules "${rule_count}"
-        fi
-
-        # rule_count 간 캐시 초기화
+        [[ "${LABEL}" != "vanilla" ]] && unload_rules "${rule_count}"
         flush_caches
     done
 
-    # TCP 서버 종료
     server_exec 'pkill -f "bw_tcp" 2>/dev/null || true' || true
 
-    # ── cross-trial 통계 ─────────────────────────────────────────────
-    log "===== Cross-trial 통계 계산 ====="
-    local stats_iqr="${RESULT_HOST}/${LABEL}_stats_iqr.csv"
-    local stats_raw="${RESULT_HOST}/${LABEL}_stats_raw.csv"
+    log "===== Latency Cross-trial 통계 ====="
+    local stats_iqr="${RESULT_HOST}/${LABEL}_latency_stats_iqr.csv"
+    local stats_raw="${RESULT_HOST}/${LABEL}_latency_stats_raw.csv"
     compute_cross_trial_stats "${summary}" "${stats_iqr}" "iqr"
     compute_cross_trial_stats "${summary}" "${stats_raw}" "raw"
 
-    # ── 결과 표시 ────────────────────────────────────────────────────
     echo ""
-    log "===== Per-trial 요약 ====="
+    log "Per-trial:"
     column -t -s',' "${summary}" 2>/dev/null || cat "${summary}"
-
     echo ""
-    log "===== Cross-trial 통계 (IQR filtered, avg +/- stddev) ====="
+    log "Cross-trial (IQR, avg ± stddev):"
     column -t -s',' "${stats_iqr}" 2>/dev/null || cat "${stats_iqr}"
+    echo ""
+    log "완료 (mode=latency, label=${LABEL}, trials=${TRIALS}, reps=${LMBENCH_REPS}, rules=[${RULE_COUNTS}])"
+}
+
+# ── throughput (규칙 수별 connect ops/sec 측정) ───────────────────────
+do_throughput() {
+    do_setup
+
+    local summary="${RESULT_HOST}/${LABEL}_throughput.csv"
+    echo "label,rule_count,trial,ops_sec,duration_sec,total_ops" > "${summary}"
+
+    for rule_count in ${RULE_COUNTS}; do
+        log "===== [Throughput] 규칙 수: ${rule_count} ====="
+        [[ "${LABEL}" != "vanilla" ]] && load_rules "${rule_count}"
+
+        for trial in $(seq 1 "${TRIALS}"); do
+            log "  rules=${rule_count} trial=${trial}: lat_connect x ${TPUT_DURATION}s"
+
+            local result
+            result=$(work_exec "
+START=\$(date +%s%N)
+COUNT=0
+END=\$(( \$(date +%s) + ${TPUT_DURATION} ))
+while [ \$(date +%s) -lt \$END ]; do
+    ${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP} >/dev/null 2>&1 && COUNT=\$((COUNT+1))
+done
+ELAPSED=\$(echo \"scale=3; (\$(date +%s%N) - \$START) / 1000000000\" | bc)
+OPS=\$(echo \"scale=1; \$COUNT / \$ELAPSED\" | bc)
+echo \"\$OPS \$ELAPSED \$COUNT\"
+")
+
+            local ops_sec elapsed total
+            ops_sec=$(echo "${result}" | awk '{print $1}')
+            elapsed=$(echo "${result}" | awk '{print $2}')
+            total=$(echo "${result}" | awk '{print $3}')
+
+            if [[ -n "${ops_sec}" && "${ops_sec}" != "0" ]]; then
+                echo "${LABEL},${rule_count},${trial},${ops_sec},${elapsed},${total}" >> "${summary}"
+                log "    ops/sec=${ops_sec}  elapsed=${elapsed}s  total=${total}"
+            else
+                warn "    측정 실패"
+                echo "${LABEL},${rule_count},${trial},0,0,0" >> "${summary}"
+            fi
+
+            [[ ${trial} -lt ${TRIALS} ]] && sleep "${COOLDOWN}"
+        done
+
+        [[ "${LABEL}" != "vanilla" ]] && unload_rules "${rule_count}"
+        flush_caches
+    done
+
+    server_exec 'pkill -f "bw_tcp" 2>/dev/null || true' || true
+
+    log "===== Throughput Cross-trial 통계 ====="
+    local stats_csv="${RESULT_HOST}/${LABEL}_throughput_stats.csv"
+    compute_throughput_cross_trial_stats "${summary}" "${stats_csv}"
 
     echo ""
-    log "결과: ${RESULT_HOST}/"
-    log "완료 (label=${LABEL}, trials=${TRIALS}, reps=${LMBENCH_REPS}, rule_counts=[${RULE_COUNTS}], pin_core=${PIN_CORE}, server=${SERVER_IP})"
+    log "Per-trial:"
+    column -t -s',' "${summary}" 2>/dev/null || cat "${summary}"
+    echo ""
+    log "Cross-trial (avg ± stddev):"
+    column -t -s',' "${stats_csv}" 2>/dev/null || cat "${stats_csv}"
+    echo ""
+    log "완료 (mode=throughput, label=${LABEL}, trials=${TRIALS}, tput_duration=${TPUT_DURATION}s, rules=[${RULE_COUNTS}])"
 }
 
 # ── cleanup ──────────────────────────────────────────────────────────
@@ -520,14 +581,16 @@ do_cleanup() {
 }
 
 case "${1:-help}" in
-    run)     do_run ;;
-    deploy)  do_deploy ;;
-    cleanup) do_cleanup ;;
+    latency)    do_latency ;;
+    throughput) do_throughput ;;
+    deploy)     do_deploy ;;
+    cleanup)    do_cleanup ;;
     *)
         echo "사용법:"
-        echo "  bash $0 run [vanilla|kloudknox|falco|tetragon]   # 전체 실행"
-        echo "  bash $0 deploy                     # 인프라만 배포"
-        echo "  bash $0 cleanup                    # 전체 정리"
+        echo "  bash $0 latency    [vanilla|kloudknox|falco|tetragon]  # 지연시간 측정 (bpftrace)"
+        echo "  bash $0 throughput [vanilla|kloudknox|falco|tetragon]  # 처리량(ops/sec) 측정"
+        echo "  bash $0 deploy                                         # 인프라만 배포"
+        echo "  bash $0 cleanup                                        # 전체 정리"
         echo ""
         echo "환경변수:"
         echo "  TRIALS=3              반복 횟수 (기본 3)"
@@ -535,6 +598,7 @@ case "${1:-help}" in
         echo "  LMBENCH_REPS=10       trial당 lmbench 반복 (기본 10회)"
         echo "  PIN_CORE=2            CPU pinning 코어 (기본 2)"
         echo "  COOLDOWN=5            trial 간 쿨다운 (기본 5초)"
+        echo "  TPUT_DURATION=10      처리량 측정 시간 (기본 10초)"
         echo "  RULE_COUNTS='10 50 100 500 1000 5000'  규칙 수 리스트"
         ;;
 esac
