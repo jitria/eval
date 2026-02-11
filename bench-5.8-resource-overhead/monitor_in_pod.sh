@@ -1,46 +1,52 @@
 #!/usr/bin/env bash
 ###############################################################################
-# monitor_in_pod.sh — v2: 차분 기반 CPU 측정
+# monitor_in_pod.sh — v3: Resource Overhead (5.8 redesign)
 #
 # privileged Pod (hostPID=true) 내에서 실행.
 # /proc/stat, /proc/<pid>/stat 차분 읽기로 정확한 CPU% 계산.
 #
-# 개선 (v1 → v2):
-#   1) 차분 기반 노드 CPU (cumulative → differential /proc/stat)
-#   2) 차분 기반 에이전트 CPU (/proc/<pid>/stat utime+stime)
-#   3) Pod 수를 인자로 전달 (ps grep 제거)
-#   4) 고정 샘플 수 후 자동 종료
-#   5) 에이전트 메모리: /proc/<pid>/status VmRSS
+# 변경 (v2 → v3):
+#   1) pod_count 인자 삭제 (더 이상 density test 아님)
+#   2) workload_mode 인자 추가 (nginx/syscall)
+#   3) CSV 헤더: timestamp,workload,agent_cpu_pct,...
+#   4) 에이전트 PID 탐색 강화 (pgrep -x → -f 폴백)
 #
 # 인자:
-#   $1 = pod_count   (오케스트레이터가 전달)
-#   $2 = agent_name  (모니터할 프로세스명, vanilla이면 빈 문자열)
-#   $3 = interval    (샘플링 간격 초)
-#   $4 = num_samples (수집할 샘플 수)
-#   $5 = output_file (/results/ 하위 파일명)
+#   $1 = agent_name    (모니터할 프로세스명, vanilla이면 빈 문자열)
+#   $2 = interval       (샘플링 간격 초)
+#   $3 = num_samples    (수집할 샘플 수)
+#   $4 = workload_mode  (nginx or syscall)
+#   $5 = output_file    (/results/ 하위 파일명)
+#
+# CSV 출력:
+#   timestamp,workload,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_mem_used_mb,node_mem_total_mb
 ###############################################################################
 set -euo pipefail
 
-POD_COUNT="${1:-0}"
-AGENT_NAME="${2:-}"
-INTERVAL="${3:-5}"
-NUM_SAMPLES="${4:-12}"
+AGENT_NAME="${1:-}"
+INTERVAL="${2:-5}"
+NUM_SAMPLES="${3:-12}"
+WORKLOAD="${4:-unknown}"
 OUTPUT="/results/${5:-monitor.csv}"
 
-echo "timestamp,pod_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_mem_used_mb,node_mem_total_mb" > "${OUTPUT}"
+echo "timestamp,workload,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_mem_used_mb,node_mem_total_mb" > "${OUTPUT}"
 
 # ── 에이전트 PID 탐색 ────────────────────────────────────────────────
 AGENT_PID=""
 if [[ -n "${AGENT_NAME}" ]]; then
-    AGENT_PID=$(pgrep -f "${AGENT_NAME}" 2>/dev/null | head -1 || true)
+    AGENT_PID=$(pgrep -x "${AGENT_NAME}" 2>/dev/null | head -1 || true)
+    if [[ -z "${AGENT_PID}" ]]; then
+        AGENT_PID=$(pgrep -f "/${AGENT_NAME}" 2>/dev/null | head -1 || true)
+    fi
+    if [[ -z "${AGENT_PID}" ]]; then
+        AGENT_PID=$(pgrep -f "${AGENT_NAME}" 2>/dev/null | head -1 || true)
+    fi
     if [[ -n "${AGENT_PID}" ]]; then
         echo "[monitor] agent PID: ${AGENT_PID} (${AGENT_NAME})"
     else
         echo "[monitor] agent not found: ${AGENT_NAME}"
     fi
 fi
-
-NPROC=$(nproc 2>/dev/null || echo 1)
 
 # ── 헬퍼 함수 ─────────────────────────────────────────────────────────
 # /proc/stat cpu 라인: user nice system idle iowait irq softirq steal
@@ -68,7 +74,9 @@ read_agent_mem_mb() {
     fi
 }
 
-echo "[monitor] pods=${POD_COUNT}, agent=${AGENT_NAME:-none}, interval=${INTERVAL}s, samples=${NUM_SAMPLES}, nproc=${NPROC}"
+NPROC=$(nproc 2>/dev/null || echo 1)
+
+echo "[monitor] workload=${WORKLOAD}, agent=${AGENT_NAME:-none}, interval=${INTERVAL}s, samples=${NUM_SAMPLES}, nproc=${NPROC}"
 
 # ── 초기 스냅샷 ───────────────────────────────────────────────────────
 prev_stat=$(read_cpu_stat)
@@ -90,16 +98,15 @@ for ((s = 1; s <= NUM_SAMPLES; s++)); do
         if(dt>0) printf "%.1f",(dt-di)/dt*100; else printf "0.0"
     }')
 
-    # 에이전트 CPU% (차분, 전체 CPU 용량 대비 %)
-    # delta_agent / delta_total * 100  (nproc 미적용 = % of total capacity)
+    # 에이전트 CPU% (차분, per-core 기준: 100% = 1코어, top/htop 방식)
     agent_cpu="0.00"
     if [[ -n "${AGENT_PID}" ]]; then
-        agent_cpu=$(echo "${prev_agent}" "${curr_agent}" "${prev_stat}" "${curr_stat}" | awk '{
+        agent_cpu=$(echo "${prev_agent}" "${curr_agent}" "${prev_stat}" "${curr_stat}" "${NPROC}" | awk '{
             da=$2-$1
             pt=$3+$4+$5+$6+$7+$8+$9+$10
             ct=$11+$12+$13+$14+$15+$16+$17+$18
-            dt=ct-pt
-            if(dt>0) printf "%.2f",da/dt*100; else printf "0.00"
+            dt=ct-pt; nproc=$19
+            if(dt>0) printf "%.2f",da/dt*100*nproc; else printf "0.00"
         }')
     fi
 
@@ -111,7 +118,7 @@ for ((s = 1; s <= NUM_SAMPLES; s++)); do
     mem_total=${mem_info%% *}
     mem_used=${mem_info##* }
 
-    echo "${ts},${POD_COUNT},${agent_cpu},${agent_mem},${node_cpu},${mem_used},${mem_total}" >> "${OUTPUT}"
+    echo "${ts},${WORKLOAD},${agent_cpu},${agent_mem},${node_cpu},${mem_used},${mem_total}" >> "${OUTPUT}"
 
     # 이전값 갱신
     prev_stat="${curr_stat}"

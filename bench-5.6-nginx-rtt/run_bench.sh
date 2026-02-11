@@ -34,6 +34,7 @@ THREADS="${THREADS:-4}"
 COOLDOWN="${COOLDOWN:-10}"
 RPS_LIST="${RPS_LIST:-1000 5000 10000}"
 CONN_LIST="${CONN_LIST:-10 50 100 500 1000}"
+MAX_RPS="${MAX_RPS:-100000}"       # throughput 모드: wrk2 -R 상한 (충분히 높게)
 
 SERVER_URL="http://nginx-bench-svc.bench-nginx.svc.cluster.local:80/"
 WRK_POD="wrk2-client"
@@ -261,7 +262,8 @@ compute_cross_trial_stats() {
     done
 }
 
-# ── wrk closed-loop 출력 파싱 (처리량 모드, -R 없음) ─────────────────
+# ── wrk2 출력 파싱 (처리량 모드, -R MAX_RPS) ──────────────────────────
+# wrk2 출력 형식에 맞춰 파싱 (50.000%, #[Mean ...] 등)
 # 출력: rps,p50_us,p75_us,p90_us,p99_us,lat_avg_us,lat_sd_us,total_reqs,transfer_kbps,errors
 parse_wrk_throughput() {
     local file="$1"
@@ -281,11 +283,22 @@ parse_wrk_throughput() {
         if (val ~ /B$/)  { gsub(/B$/,  "", val); return val / 1024 }
         return 0
     }
-    /^ *50%/  { p50  = to_us($2) }
-    /^ *75%/  { p75  = to_us($2) }
-    /^ *90%/  { p90  = to_us($2) }
-    /^ *99%/  { p99  = to_us($2) }
-    /^ *Latency/ && !/Distribution/ { lat_avg = to_us($2); lat_sd = to_us($3) }
+    /^ *50\.000%/  { p50  = to_us($2) }
+    /^ *75\.000%/  { p75  = to_us($2) }
+    /^ *90\.000%/  { p90  = to_us($2) }
+    /^ *99\.000%/  { p99  = to_us($2) }
+    /^#\[Mean/ {
+        gsub(/[^0-9.]/, " ", $0)
+        split($0, vals, " ")
+        found = 0
+        for (i = 1; i <= length(vals); i++) {
+            if (vals[i]+0 > 0) {
+                found++
+                if (found == 1) lat_avg_ms = vals[i]
+                if (found == 2) { lat_sd_ms = vals[i]; break }
+            }
+        }
+    }
     /Requests\/sec:/  { rps = $2 }
     /Transfer\/sec:/  { tput = to_kbps($2) }
     /requests in/     { reqs = $1 }
@@ -295,6 +308,8 @@ parse_wrk_throughput() {
         }
     }
     END {
+        lat_avg = lat_avg_ms * 1000
+        lat_sd  = lat_sd_ms * 1000
         printf "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%d\n",
             rps+0, p50+0, p75+0, p90+0, p99+0, lat_avg+0, lat_sd+0, reqs+0, tput+0, errs+0
     }
@@ -312,10 +327,10 @@ compute_throughput_cross_trial_stats() {
             -v label="${LABEL}" -v conns="${conns}" -v dur="${DURATION}" '
         {
             n++
-            srps += $4; sqrps += $4*$4
-            sp50 += $5; sqp50 += $5*$5
-            sp99 += $8; sqp99 += $8*$8
-            stput += $12; sqtput += $12*$12
+            srps += $5; sqrps += $5*$5
+            sp50 += $6; sqp50 += $6*$6
+            sp99 += $9; sqp99 += $9*$9
+            stput += $13; sqtput += $13*$13
         }
         END {
             if (n == 0) exit
@@ -466,8 +481,8 @@ do_throughput() {
             local remote="/results/${LABEL}_${tag}.txt"
             local local_f="${RESULT_HOST}/${LABEL}_${tag}.txt"
 
-            log "  CONNS=${conns} (max RPS)"
-            wrk_exec "/tools/bin/wrk -t${THREADS} -c${conns} -d${DURATION} --latency ${SERVER_URL} > ${remote} 2>&1" || true
+            log "  CONNS=${conns} (max RPS, -R${MAX_RPS})"
+            wrk_exec "/tools/bin/wrk -t${THREADS} -c${conns} -d${DURATION} -R${MAX_RPS} --latency ${SERVER_URL} > ${remote} 2>&1" || true
 
             kubectl cp "${NS}/${WRK_POD}:${remote}" "${local_f}" 2>/dev/null || \
                 wrk_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true

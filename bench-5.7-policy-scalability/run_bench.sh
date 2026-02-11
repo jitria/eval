@@ -39,7 +39,8 @@ WARMUP_SEC="${WARMUP_SEC:-30}"
 LMBENCH_REPS="${LMBENCH_REPS:-10}"
 PIN_CORE="${PIN_CORE:-2}"
 COOLDOWN="${COOLDOWN:-5}"
-TPUT_DURATION="${TPUT_DURATION:-10}"  # 처리량 측정 시간 (초)
+TPUT_DURATION="${TPUT_DURATION:-10}"  # 처리량 측정 시간 (초, 외부 루프 미사용)
+TPUT_N="${TPUT_N:-1000}"             # lat_connect -N 반복 횟수
 RULE_COUNTS="${RULE_COUNTS:-10 50 100 500 1000 5000}"
 
 log()  { echo -e "\e[1;36m[5.7]\e[0m $*"; }
@@ -421,7 +422,7 @@ echo 'warm-up done'
 compute_throughput_cross_trial_stats() {
     local summary_csv="$1" stats_csv="$2"
 
-    echo "label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_duration,std_duration" > "${stats_csv}"
+    echo "label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_latency_us,std_latency_us" > "${stats_csv}"
 
     for rc in ${RULE_COUNTS}; do
         grep "^${LABEL},${rc},[0-9]*," "${summary_csv}" 2>/dev/null | awk -F',' \
@@ -429,14 +430,14 @@ compute_throughput_cross_trial_stats() {
         {
             n++
             sops += $4; sqops += $4*$4
-            sdur += $5; sqdur += $5*$5
+            slat += $5; sqlat += $5*$5
         }
         END {
             if (n == 0) exit
-            aops = sops/n; adur = sdur/n
+            aops = sops/n; alat = slat/n
             vops = sqops/n - aops*aops; sdops = sqrt(vops > 0 ? vops : 0)
-            vdur = sqdur/n - adur*adur; sddur = sqrt(vdur > 0 ? vdur : 0)
-            printf "%s,%s,%d,%.1f,%.1f,%.2f,%.2f\n", label, rc, n, aops, sdops, adur, sddur
+            vlat = sqlat/n - alat*alat; sdlat = sqrt(vlat > 0 ? vlat : 0)
+            printf "%s,%s,%d,%.1f,%.1f,%.2f,%.2f\n", label, rc, n, aops, sdops, alat, sdlat
         }' >> "${stats_csv}" || true
     done
 }
@@ -504,43 +505,34 @@ do_latency() {
 }
 
 # ── throughput (규칙 수별 connect ops/sec 측정) ───────────────────────
+# lat_connect -N 으로 내부 반복, 출력된 μs 값에서 ops/sec = 1000000/μs 계산
 do_throughput() {
     do_setup
 
     local summary="${RESULT_HOST}/${LABEL}_throughput.csv"
-    echo "label,rule_count,trial,ops_sec,duration_sec,total_ops" > "${summary}"
+    echo "label,rule_count,trial,ops_sec,latency_us,N" > "${summary}"
 
     for rule_count in ${RULE_COUNTS}; do
         log "===== [Throughput] 규칙 수: ${rule_count} ====="
         [[ "${LABEL}" != "vanilla" ]] && load_rules "${rule_count}"
 
         for trial in $(seq 1 "${TRIALS}"); do
-            log "  rules=${rule_count} trial=${trial}: lat_connect x ${TPUT_DURATION}s"
+            log "  rules=${rule_count} trial=${trial}: lat_connect -N ${TPUT_N}"
 
             local result
-            result=$(work_exec "
-START=\$(date +%s%N)
-COUNT=0
-END=\$(( \$(date +%s) + ${TPUT_DURATION} ))
-while [ \$(date +%s) -lt \$END ]; do
-    ${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP} >/dev/null 2>&1 && COUNT=\$((COUNT+1))
-done
-ELAPSED=\$(echo \"scale=3; (\$(date +%s%N) - \$START) / 1000000000\" | bc)
-OPS=\$(echo \"scale=1; \$COUNT / \$ELAPSED\" | bc)
-echo \"\$OPS \$ELAPSED \$COUNT\"
-")
+            result=$(work_exec "${PIN_CMD} /tools/bin/lat_connect -N ${TPUT_N} ${SERVER_IP} 2>&1")
 
-            local ops_sec elapsed total
-            ops_sec=$(echo "${result}" | awk '{print $1}')
-            elapsed=$(echo "${result}" | awk '{print $2}')
-            total=$(echo "${result}" | awk '{print $3}')
+            # "TCP/IP connection cost to X.X.X.X: 123.4567 microseconds" 파싱
+            local latency_us ops_sec
+            latency_us=$(echo "${result}" | grep -oP '[\d.]+(?= microseconds)' | head -1)
 
-            if [[ -n "${ops_sec}" && "${ops_sec}" != "0" ]]; then
-                echo "${LABEL},${rule_count},${trial},${ops_sec},${elapsed},${total}" >> "${summary}"
-                log "    ops/sec=${ops_sec}  elapsed=${elapsed}s  total=${total}"
+            if [[ -n "${latency_us}" ]]; then
+                ops_sec=$(awk "BEGIN {printf \"%.1f\", 1000000 / ${latency_us}}")
+                echo "${LABEL},${rule_count},${trial},${ops_sec},${latency_us},${TPUT_N}" >> "${summary}"
+                log "    latency=${latency_us}μs  ops/sec=${ops_sec}  (N=${TPUT_N})"
             else
-                warn "    측정 실패"
-                echo "${LABEL},${rule_count},${trial},0,0,0" >> "${summary}"
+                warn "    측정 실패: ${result}"
+                echo "${LABEL},${rule_count},${trial},0,0,${TPUT_N}" >> "${summary}"
             fi
 
             [[ ${trial} -lt ${TRIALS} ]] && sleep "${COOLDOWN}"
@@ -563,7 +555,7 @@ echo \"\$OPS \$ELAPSED \$COUNT\"
     log "Cross-trial (avg ± stddev):"
     column -t -s',' "${stats_csv}" 2>/dev/null || cat "${stats_csv}"
     echo ""
-    log "완료 (mode=throughput, label=${LABEL}, trials=${TRIALS}, tput_duration=${TPUT_DURATION}s, rules=[${RULE_COUNTS}])"
+    log "완료 (mode=throughput, label=${LABEL}, trials=${TRIALS}, N=${TPUT_N}, rules=[${RULE_COUNTS}])"
 }
 
 # ── cleanup ──────────────────────────────────────────────────────────
