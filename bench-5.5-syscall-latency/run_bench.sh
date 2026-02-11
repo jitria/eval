@@ -154,9 +154,11 @@ remove_policy() {
             kubectl delete -f "${SCRIPT_DIR}/policies/kloudknox-policy.yaml" --ignore-not-found 2>/dev/null || true
             ;;
         falco)
-            helm upgrade falco falcosecurity/falco -n falco --reuse-values \
-                --set-json 'customRules={}' \
-                --wait --timeout 120s 2>/dev/null || true
+            if helm status falco -n falco &>/dev/null; then
+                helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+                    --set-json 'customRules={}' \
+                    --wait --timeout 120s 2>/dev/null || true
+            fi
             ;;
         tetragon)
             kubectl delete -f "${SCRIPT_DIR}/policies/tetragon-policy.yaml" --ignore-not-found 2>/dev/null || true
@@ -496,7 +498,13 @@ echo 'warm-up done'
 # ── cleanup ──────────────────────────────────────────────────────────
 do_cleanup() {
     log "정리"
-    remove_policy
+    # 모든 정책 제거
+    kubectl delete -f "${SCRIPT_DIR}/policies/kloudknox-policy.yaml" --ignore-not-found 2>/dev/null || true
+    if helm status falco -n falco &>/dev/null; then
+        helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+            --set-json 'customRules={}' --wait --timeout 120s 2>/dev/null || true
+    fi
+    kubectl delete -f "${SCRIPT_DIR}/policies/tetragon-policy.yaml" --ignore-not-found 2>/dev/null || true
     kubectl delete namespace "${NS}" --ignore-not-found --grace-period=5
     log "완료"
 }

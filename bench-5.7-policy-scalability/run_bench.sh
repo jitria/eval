@@ -508,6 +508,13 @@ echo 'warm-up done'
 # ── cleanup ──────────────────────────────────────────────────────────
 do_cleanup() {
     log "전체 정리"
+    # 모든 정책 제거
+    kubectl delete kloudknoxpolicy.security.boanlab.com --all -n "${NS}" --ignore-not-found 2>/dev/null || true
+    if helm status falco -n falco &>/dev/null; then
+        helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+            --set-json 'customRules={}' --wait --timeout 120s 2>/dev/null || true
+    fi
+    kubectl delete tracingpolicy --all --ignore-not-found 2>/dev/null || true
     kubectl delete namespace "${NS}" --ignore-not-found --grace-period=5
     log "정리 완료"
 }
