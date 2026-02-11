@@ -65,6 +65,61 @@ tracer_exec() { kubectl -n "${NS}" exec "${TRACER_POD}" -- bash -c "$1" 2>&1; }
 work_exec()   { kubectl -n "${NS}" exec "${WORKLOAD_POD}" -- bash -c "$1" 2>&1; }
 server_exec() { kubectl -n "${NS}" exec "${SERVER_POD}" -- bash -c "$1" 2>&1; }
 
+# ── 정책 적용 검증 ─────────────────────────────────────────────────
+verify_policy() {
+    [[ "${LABEL}" == "vanilla" ]] && return
+    log "정책 적용 검증 (${LABEL})"
+    local ok=false
+    case "${LABEL}" in
+        kloudknox)
+            for _i in $(seq 1 15); do
+                if kubectl -n "${NS}" get kloudknoxpolicy.security.boanlab.com -o name 2>/dev/null | grep -q .; then
+                    ok=true; break
+                fi
+                sleep 1
+            done
+            if [[ "${ok}" == "true" ]]; then
+                kubectl logs -n kloudknox -l boanlab.com/app=kloudknox --tail=10 2>/dev/null \
+                    | grep -qi "KloudKnoxPolicy" \
+                    && log "  KloudKnox 에이전트 정책 로드 확인" \
+                    || warn "  KloudKnox 에이전트 로그 확인 불가 (리소스는 존재)"
+            else
+                warn "KloudKnox 정책 리소스 미생성"; return 1
+            fi
+            ;;
+        falco)
+            for _i in $(seq 1 15); do
+                if kubectl logs -n falco -l app.kubernetes.io/name=falco -c falco --tail=30 2>/dev/null \
+                    | grep -qi "Loading rules\|Loaded event"; then
+                    ok=true; break
+                fi
+                sleep 1
+            done
+            [[ "${ok}" == "true" ]] && log "  Falco 룰 로딩 확인" \
+                || { warn "Falco 룰 로딩 미확인"; return 1; }
+            ;;
+        tetragon)
+            for _i in $(seq 1 15); do
+                if kubectl get tracingpolicy -o name 2>/dev/null | grep -q .; then
+                    ok=true; break
+                fi
+                sleep 1
+            done
+            if [[ "${ok}" == "true" ]]; then
+                if kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon \
+                    -c tetragon --tail=30 2>/dev/null | grep -qi "Loaded sensor successfully"; then
+                    log "  TracingPolicy 센서 로드 확인"
+                else
+                    warn "  TracingPolicy 센서 로드 로그 미확인 (리소스는 존재)"
+                fi
+            else
+                warn "TracingPolicy 리소스 미생성"; return 1
+            fi
+            ;;
+    esac
+    log "정책 검증 완료"
+}
+
 # ── 정책 적용/제거 ─────────────────────────────────────────────────
 apply_policy() {
     [[ "${LABEL}" == "vanilla" ]] && return
@@ -72,19 +127,17 @@ apply_policy() {
     case "${LABEL}" in
         kloudknox)
             kubectl apply -f "${SCRIPT_DIR}/policies/kloudknox-policy.yaml"
-            sleep 3
             ;;
         falco)
             helm upgrade falco falcosecurity/falco -n falco --reuse-values \
                 --set-file "customRules.bench-rules\.yaml=${SCRIPT_DIR}/policies/falco-rules.yaml" \
-                --wait --timeout 120s 2>&1 || true
-            sleep 5
+                --wait --timeout 120s
             ;;
         tetragon)
             kubectl apply -f "${SCRIPT_DIR}/policies/tetragon-policy.yaml"
-            sleep 3
             ;;
     esac
+    verify_policy
     log "정책 적용 완료"
 }
 
@@ -260,13 +313,21 @@ measure_one() {
     local sc="$1" bt="$2" lmbench_cmd="$3" trial="$4" reps="${5:-${LMBENCH_REPS}}"
     local trace_file="/results/${LABEL}_${sc}_trial${trial}.log"
 
-    # 1) bpftrace 시작
+    # 1) bpftrace 시작 ("Attaching" 메시지로 attach 완료 확인)
     tracer_exec "
 cat > /tmp/run_bt.sh << 'BTEOF'
 #!/bin/bash
 nohup bpftrace /scripts/${bt} > ${trace_file} 2>&1 &
 echo \$! > /tmp/bpf_pid
-sleep 2
+for _i in \$(seq 1 30); do
+    if grep -q 'Attaching' ${trace_file} 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
+if ! grep -q 'Attaching' ${trace_file} 2>/dev/null; then
+    echo 'WARN: bpftrace attach not detected after 30s' >&2
+fi
 BTEOF
 bash /tmp/run_bt.sh
 "

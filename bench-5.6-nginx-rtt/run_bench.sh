@@ -43,6 +43,61 @@ warn() { echo -e "\e[1;33m[5.6]\e[0m $*"; }
 
 wrk_exec() { kubectl -n "${NS}" exec "${WRK_POD}" -- bash -c "$1" 2>&1; }
 
+# ── 정책 적용 검증 ─────────────────────────────────────────────────
+verify_policy() {
+    [[ "${LABEL}" == "vanilla" ]] && return
+    log "정책 적용 검증 (${LABEL})"
+    local ok=false
+    case "${LABEL}" in
+        kloudknox)
+            for _i in $(seq 1 15); do
+                if kubectl -n "${NS}" get kloudknoxpolicy.security.boanlab.com -o name 2>/dev/null | grep -q .; then
+                    ok=true; break
+                fi
+                sleep 1
+            done
+            if [[ "${ok}" == "true" ]]; then
+                kubectl logs -n kloudknox -l boanlab.com/app=kloudknox --tail=10 2>/dev/null \
+                    | grep -qi "KloudKnoxPolicy" \
+                    && log "  KloudKnox 에이전트 정책 로드 확인" \
+                    || warn "  KloudKnox 에이전트 로그 확인 불가 (리소스는 존재)"
+            else
+                warn "KloudKnox 정책 리소스 미생성"; return 1
+            fi
+            ;;
+        falco)
+            for _i in $(seq 1 15); do
+                if kubectl logs -n falco -l app.kubernetes.io/name=falco -c falco --tail=30 2>/dev/null \
+                    | grep -qi "Loading rules\|Loaded event"; then
+                    ok=true; break
+                fi
+                sleep 1
+            done
+            [[ "${ok}" == "true" ]] && log "  Falco 룰 로딩 확인" \
+                || { warn "Falco 룰 로딩 미확인"; return 1; }
+            ;;
+        tetragon)
+            for _i in $(seq 1 15); do
+                if kubectl get tracingpolicy -o name 2>/dev/null | grep -q .; then
+                    ok=true; break
+                fi
+                sleep 1
+            done
+            if [[ "${ok}" == "true" ]]; then
+                if kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon \
+                    -c tetragon --tail=30 2>/dev/null | grep -qi "Loaded sensor successfully"; then
+                    log "  TracingPolicy 센서 로드 확인"
+                else
+                    warn "  TracingPolicy 센서 로드 로그 미확인 (리소스는 존재)"
+                fi
+            else
+                warn "TracingPolicy 리소스 미생성"; return 1
+            fi
+            ;;
+    esac
+    log "정책 검증 완료"
+}
+
 # ── 정책 적용/제거 ─────────────────────────────────────────────────
 apply_policy() {
     [[ "${LABEL}" == "vanilla" ]] && return
@@ -50,19 +105,17 @@ apply_policy() {
     case "${LABEL}" in
         kloudknox)
             kubectl apply -f "${SCRIPT_DIR}/policies/kloudknox-policy.yaml"
-            sleep 3
             ;;
         falco)
             helm upgrade falco falcosecurity/falco -n falco --reuse-values \
                 --set-file "customRules.bench-rules\.yaml=${SCRIPT_DIR}/policies/falco-rules.yaml" \
-                --wait --timeout 120s 2>&1 || true
-            sleep 5
+                --wait --timeout 120s
             ;;
         tetragon)
             kubectl apply -f "${SCRIPT_DIR}/policies/tetragon-policy.yaml"
-            sleep 3
             ;;
     esac
+    verify_policy
     log "정책 적용 완료"
 }
 
@@ -83,6 +136,30 @@ remove_policy() {
             ;;
     esac
     log "정책 제거 완료"
+}
+
+# ── CDF 데이터 추출 (Lua done 콜백, 6001 포인트) ─────────────────────
+# wrk2 출력에서 Lua done 콜백이 생성한 ---CDF_START--- ~ ---CDF_END--- 구간 파싱
+# 입력: wrk2 출력 파일, 대상 CDF CSV 파일, 메타데이터(label,rps,conns,trial)
+CDF_POINTS="${CDF_POINTS:-6000}"
+
+extract_cdf() {
+    local file="$1" cdf_file="$2" label="$3" rps="$4" conns="$5" trial="$6"
+
+    if [[ ! -f "${file}" ]] || [[ ! -s "${file}" ]]; then
+        return
+    fi
+
+    awk -v label="${label}" -v rps="${rps}" -v conns="${conns}" -v trial="${trial}" '
+    /---CDF_START---/ { in_cdf = 1; next }
+    /---CDF_END---/ { exit }
+    in_cdf && NF >= 1 {
+        split($0, a, ",")
+        if (a[1]+0 >= 0) {
+            printf "%s,%s,%s,%s,%s,%s\n", label, rps, conns, trial, a[2], a[1]
+        }
+    }
+    ' "${file}" >> "${cdf_file}"
 }
 
 # ── wrk2 출력 파싱 (단위 → μs 정규화) ───────────────────────────────
@@ -203,6 +280,19 @@ do_run() {
     do_deploy
     mkdir -p "${RESULT_HOST}"
 
+    # CDF Lua 스크립트 생성 (wrk2 done 콜백에서 percentile 6001 포인트 출력)
+    wrk_exec "cat > /tmp/cdf_report.lua << 'LUAEOF'
+done = function(summary, latency, requests)
+    io.write(\"---CDF_START---\\n\")
+    local N = ${CDF_POINTS}
+    for i = 0, N do
+        local p = i / N * 99.999
+        io.write(string.format(\"%.6f,%.3f\\n\", p / 100, latency:percentile(p)))
+    end
+    io.write(\"---CDF_END---\\n\")
+end
+LUAEOF"
+
     # 정책 적용
     apply_policy
 
@@ -232,6 +322,10 @@ do_run() {
     local summary="${RESULT_HOST}/${LABEL}_summary.csv"
     echo "label,rps_target,connections,trial,duration,p50_us,p75_us,p90_us,p99_us,p999_us,mean_us,actual_rps,total_reqs,transfer_kbps,errors,saturated" > "${summary}"
 
+    # CDF 데이터 CSV (Lua 기반, ${CDF_POINTS}+1 포인트/run)
+    local cdf_csv="${RESULT_HOST}/${LABEL}_cdf.csv"
+    echo "label,rps_target,connections,trial,latency_us,percentile" > "${cdf_csv}"
+
     # ── 측정 루프 ─────────────────────────────────────────────────────
     for trial in $(seq 1 "${TRIALS}"); do
         log "===== Trial ${trial}/${TRIALS} ====="
@@ -243,7 +337,7 @@ do_run() {
                 local local_f="${RESULT_HOST}/${LABEL}_${tag}.txt"
 
                 log "  RPS=${rps} CONNS=${conns}"
-                wrk_exec "/tools/bin/wrk -t${THREADS} -c${conns} -d${DURATION} -R${rps} --latency ${SERVER_URL} > ${remote} 2>&1" || true
+                wrk_exec "/tools/bin/wrk -t${THREADS} -c${conns} -d${DURATION} -R${rps} --latency -s /tmp/cdf_report.lua ${SERVER_URL} > ${remote} 2>&1" || true
 
                 # 결과 파일 마스터로 전송
                 kubectl cp "${NS}/${WRK_POD}:${remote}" "${local_f}" 2>/dev/null || \
@@ -254,6 +348,9 @@ do_run() {
                     local stats
                     stats=$(parse_wrk2_result "${local_f}" "${rps}")
                     echo "${LABEL},${rps},${conns},${trial},${DURATION},${stats}" >> "${summary}"
+
+                    # CDF 데이터 추출 (HdrHistogram spectrum 전체)
+                    extract_cdf "${local_f}" "${cdf_csv}" "${LABEL}" "${rps}" "${conns}" "${trial}"
 
                     # 화면에 p50/p99/throughput/포화 표시
                     local p50_disp p99_disp mean_disp tput_disp sat_disp
@@ -288,6 +385,11 @@ do_run() {
     echo ""
     log "===== Cross-trial 통계 (avg ± stddev) ====="
     column -t -s',' "${stats_csv}" 2>/dev/null || cat "${stats_csv}"
+
+    # ── CDF 데이터 요약 ─────────────────────────────────────────────
+    local cdf_lines
+    cdf_lines=$(( $(wc -l < "${cdf_csv}") - 1 ))
+    log "===== CDF 데이터: ${cdf_csv} (${cdf_lines} 포인트) ====="
 
     echo ""
     log "결과: ${RESULT_HOST}/"
