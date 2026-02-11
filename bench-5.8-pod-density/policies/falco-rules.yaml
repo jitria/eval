@@ -21,8 +21,9 @@
     and container.id != host
   output: >
     Process executed in density pod
-    (user=%user.name command=%proc.cmdline
-     container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     parent=%proc.pname container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, pod-density]
 
@@ -34,8 +35,9 @@
     and (fd.name startswith /etc/ or fd.name startswith /proc/ or fd.name startswith /sys/)
   output: >
     Sensitive file access in density pod
-    (user=%user.name file=%fd.name command=%proc.cmdline
-     container=%container.name ns=%k8s.ns.name)
+    (user=%user.name file=%fd.name dir=%fd.directory exe=%proc.exepath
+     command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, pod-density]
 
@@ -47,8 +49,9 @@
     and fd.type = ipv4
   output: >
     Network connect from density pod
-    (user=%user.name command=%proc.cmdline dest=%fd.sip:%fd.sport
-     container=%container.name ns=%k8s.ns.name)
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     dest=%fd.sip:%fd.sport container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, pod-density]
 
@@ -59,7 +62,8 @@
     and container.id != host
   output: >
     Network accept in density pod
-    (user=%user.name command=%proc.cmdline client=%fd.cip:%fd.cport
-     container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     client=%fd.cip:%fd.cport container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, pod-density]

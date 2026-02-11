@@ -22,6 +22,7 @@
   output: >
     Nginx inbound connection
     (client=%fd.cip:%fd.cport server=%fd.sip:%fd.sport
+     exe=%proc.exepath command=%proc.cmdline
      container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, nginx-rtt]
@@ -35,8 +36,9 @@
     and fd.type = ipv4
   output: >
     Nginx outbound connection
-    (user=%user.name command=%proc.cmdline dest=%fd.sip:%fd.sport
-     container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     dest=%fd.sip:%fd.sport container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, nginx-rtt]
 
@@ -48,7 +50,9 @@
     and k8s.ns.name = bench-nginx
   output: >
     Process in Nginx namespace
-    (user=%user.name command=%proc.cmdline container=%container.name)
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     parent=%proc.pname container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, nginx-rtt]
 
@@ -60,7 +64,8 @@
     and k8s.ns.name = bench-nginx
   output: >
     File access in Nginx namespace
-    (user=%user.name file=%fd.name command=%proc.cmdline
-     container=%container.name)
+    (user=%user.name file=%fd.name dir=%fd.directory exe=%proc.exepath
+     command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, nginx-rtt]

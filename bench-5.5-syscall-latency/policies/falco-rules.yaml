@@ -17,7 +17,8 @@
     and container.id != host
   output: >
     Process executed
-    (user=%user.name command=%proc.cmdline container=%container.name
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     parent=%proc.pname container=%container.name
      ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, syscall-latency]
@@ -29,8 +30,9 @@
     and container.id != host
   output: >
     File opened
-    (user=%user.name file=%fd.name command=%proc.cmdline
-     container=%container.name ns=%k8s.ns.name)
+    (user=%user.name file=%fd.name dir=%fd.directory exe=%proc.exepath
+     command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, syscall-latency]
 
@@ -42,7 +44,8 @@
     and fd.type = ipv4
   output: >
     Network connect
-    (user=%user.name command=%proc.cmdline dest=%fd.sip:%fd.sport
-     container=%container.name ns=%k8s.ns.name)
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     dest=%fd.sip:%fd.sport container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, syscall-latency]
