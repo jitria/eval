@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.5 Syscall Latency (v4 - cross-node 통일)
+# run_bench.sh — 5.5 Syscall Latency (v5 - 단일 노드)
 #
-# 개선 사항 (v3 → v4):
-#   - connect 측정을 loopback → cross-node로 변경
-#     클라이언트(compute-node-1) → 서버(compute-node-2)
-#     5.6, 5.7과 동일한 네트워크 경로 + 노드 역할
-#   - 모든 Pod를 compute-node-1(클라이언트)에 배치
-#   - tcp-server Pod(compute-node-2)에서 bw_tcp -s 실행
+# 개선 사항 (v4 → v5):
+#   - connect를 cross-node → 단일 노드(compute-node-1)로 변경
+#     네트워크 홉 제거 → 순수 syscall 오버헤드만 측정
+#   - trial별 즉시 통계 표시 (p50/p99/avg ± stddev)
 #
-# 기존 유지 (v3):
+# 기존 유지:
 #   1) openat 샘플 수 증가: OPENAT_MULT 배수
 #   2) trial 간 독립성: drop_caches + sync + sleep
 #   3) IQR 기반 outlier 필터링: raw/iqr 양쪽 통계 출력
@@ -17,16 +15,14 @@
 #   5) 결과 전송: kubectl cp 우선, 실패 시 cat fallback
 #   6) comm 필터, printf 개별 ns, 실제 워밍업
 #
-# 아키텍처:
-#   compute-node-1 (클라이언트)
+# 아키텍처 (단일 노드):
+#   compute-node-1
 #   ├── bpftrace DaemonSet (privileged, hostPID)
 #   │   └── trace_{execve,openat,connect}.bt
-#   └── workload Pod (lmbench)
-#       ├── lat_proc exec       (execve)
-#       ├── lat_syscall open    (openat)
-#       └── lat_connect <서버IP> (connect, cross-node)
-#
-#   compute-node-2 (서버)
+#   ├── workload Pod (lmbench)
+#   │   ├── lat_proc exec       (execve)
+#   │   ├── lat_syscall open    (openat)
+#   │   └── lat_connect <서버IP> (connect, same-node)
 #   └── tcp-server Pod
 #       └── bw_tcp -s (TCP accept 서버)
 #
@@ -297,7 +293,7 @@ do_deploy() {
 
     # 서버 Pod IP
     SERVER_IP=$(kubectl -n "${NS}" get pod tcp-server -o jsonpath='{.status.podIP}')
-    log "서버 Pod IP: ${SERVER_IP} (compute-node-2)"
+    log "서버 Pod IP: ${SERVER_IP} (compute-node-1, same-node)"
 
     log "Pod 배치 확인:"
     kubectl -n "${NS}" get pods -o wide
@@ -372,8 +368,8 @@ do_run() {
     # 시스템 정보
     tracer_exec "{ uname -a; lscpu | head -20; free -h; } > /results/${LABEL}_sysinfo.txt"
 
-    # TCP 서버 시작 (서버 Pod, compute-node-2)
-    log "TCP 서버 시작 (bw_tcp -s on ${SERVER_IP})"
+    # TCP 서버 시작 (서버 Pod, compute-node-1 same-node)
+    log "TCP 서버 시작 (bw_tcp -s on ${SERVER_IP}, same-node)"
     server_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
     sleep 2
 
@@ -413,18 +409,54 @@ echo 'warm-up done'
     # openat 반복 횟수
     local openat_reps=$((LMBENCH_REPS * OPENAT_MULT))
 
-    # ── 측정 ─────────────────────────────────────────────────────────
+    # ── 결과 CSV 초기화 ──────────────────────────────────────────────
+    local summary="${RESULT_HOST}/${LABEL}_summary.csv"
+    echo "label,syscall,trial,filter,avg_ns,p50_ns,p99_ns,min_ns,max_ns,count,stddev_ns" > "${summary}"
+
+    # ── 측정 + 즉시 수집/통계 ──────────────────────────────────────────
     for trial in $(seq 1 "${TRIALS}"); do
         log "===== Trial ${trial}/${TRIALS} ====="
 
-        measure_one "execve"  "trace_execve.bt"  "${PIN_CMD} /tools/bin/lat_proc exec"           "${trial}"
-        sleep 3
+        for sc_info in "execve:trace_execve.bt:${PIN_CMD} /tools/bin/lat_proc exec:${LMBENCH_REPS}" \
+                       "openat:trace_openat.bt:${PIN_CMD} /tools/bin/lat_syscall open:${openat_reps}" \
+                       "connect:trace_connect.bt:${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP}:${LMBENCH_REPS}"; do
+            local sc bt cmd reps_n
+            sc="${sc_info%%:*}";       sc_info="${sc_info#*:}"
+            bt="${sc_info%%:*}";       sc_info="${sc_info#*:}"
+            reps_n="${sc_info##*:}"
+            cmd="${sc_info%:*}"
 
-        measure_one "openat"  "trace_openat.bt"  "${PIN_CMD} /tools/bin/lat_syscall open"        "${trial}" "${openat_reps}"
-        sleep 3
+            measure_one "${sc}" "${bt}" "${cmd}" "${trial}" "${reps_n}"
+            sleep 1
 
-        measure_one "connect" "trace_connect.bt" "${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP}" "${trial}"
-        sleep 3
+            # 즉시 결과 수집
+            local remote="/results/${LABEL}_${sc}_trial${trial}.log"
+            local local_f="${RESULT_HOST}/${LABEL}_${sc}_trial${trial}.log"
+            kubectl cp "${NS}/${TRACER_POD}:${remote}" "${local_f}" 2>/dev/null || \
+                tracer_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
+
+            # 즉시 통계 계산 + 표시
+            if [[ -f "${local_f}" && -s "${local_f}" ]]; then
+                local raw_stats iqr_stats
+                raw_stats=$(compute_stats "${local_f}" "raw")
+                iqr_stats=$(compute_stats "${local_f}" "iqr")
+                echo "${LABEL},${sc},${trial},raw,${raw_stats}" >> "${summary}"
+                echo "${LABEL},${sc},${trial},iqr,${iqr_stats}" >> "${summary}"
+
+                # 인라인 표시: p50/p99/avg ± stddev (IQR filtered)
+                local i_avg i_p50 i_p99 i_cnt i_sd
+                i_avg=$(echo "${iqr_stats}" | cut -d, -f1)
+                i_p50=$(echo "${iqr_stats}" | cut -d, -f2)
+                i_p99=$(echo "${iqr_stats}" | cut -d, -f3)
+                i_cnt=$(echo "${iqr_stats}" | cut -d, -f6)
+                i_sd=$(echo "${iqr_stats}"  | cut -d, -f7)
+                log "    ${sc}: avg=${i_avg}±${i_sd}ns  p50=${i_p50}ns  p99=${i_p99}ns  (n=${i_cnt})"
+            else
+                warn "    ${sc}: 결과 없음"
+            fi
+
+            sleep 2
+        done
 
         # trial 간 캐시 초기화 (마지막 trial 제외)
         if [[ ${trial} -lt ${TRIALS} ]]; then
@@ -434,37 +466,6 @@ echo 'warm-up done'
 
     # TCP 서버 종료
     server_exec 'pkill -f "bw_tcp" 2>/dev/null || true' || true
-
-    # ── 결과 수집 ──────────────────────────────────────────────────────
-    log "===== 결과 수집 ====="
-
-    for sc in execve openat connect; do
-        for trial in $(seq 1 "${TRIALS}"); do
-            local remote="/results/${LABEL}_${sc}_trial${trial}.log"
-            local local_f="${RESULT_HOST}/${LABEL}_${sc}_trial${trial}.log"
-            kubectl cp "${NS}/${TRACER_POD}:${remote}" "${local_f}" 2>/dev/null || \
-                tracer_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
-        done
-    done
-
-    # ── 통계 계산 (raw + iqr) ──────────────────────────────────────────
-    log "===== 통계 계산 ====="
-
-    local summary="${RESULT_HOST}/${LABEL}_summary.csv"
-    echo "label,syscall,trial,filter,avg_ns,p50_ns,p99_ns,min_ns,max_ns,count,stddev_ns" > "${summary}"
-
-    for sc in execve openat connect; do
-        for trial in $(seq 1 "${TRIALS}"); do
-            local f="${RESULT_HOST}/${LABEL}_${sc}_trial${trial}.log"
-            if [[ -f "${f}" ]]; then
-                local raw_stats iqr_stats
-                raw_stats=$(compute_stats "${f}" "raw")
-                iqr_stats=$(compute_stats "${f}" "iqr")
-                echo "${LABEL},${sc},${trial},raw,${raw_stats}" >> "${summary}"
-                echo "${LABEL},${sc},${trial},iqr,${iqr_stats}" >> "${summary}"
-            fi
-        done
-    done
 
     # ── cross-trial 통계 ──────────────────────────────────────────────
     log "===== Cross-trial 통계 계산 ====="
