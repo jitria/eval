@@ -262,12 +262,12 @@ verify_policy() {
             fi
             ;;
         falco)
-            for _i in $(seq 1 15); do
-                if kubectl logs -n falco -l app.kubernetes.io/name=falco -c falco --tail=30 2>/dev/null \
+            for _i in $(seq 1 30); do
+                if kubectl logs -n falco -l app.kubernetes.io/name=falco -c falco --since=60s 2>/dev/null \
                     | grep -qi "Loading rules\|Loaded event"; then
                     ok=true; break
                 fi
-                sleep 1
+                sleep 2
             done
             [[ "${ok}" == "true" ]] && log "    Falco 룰 로딩 확인" \
                 || { warn "  Falco 룰 로딩 미확인"; return 1; }
