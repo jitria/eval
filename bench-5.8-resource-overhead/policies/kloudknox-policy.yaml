@@ -1,0 +1,112 @@
+###############################################################################
+# KloudKnox Policy — 5.8 Pod Density
+#
+# 5.5 (syscall) + 5.6 (nginx) KloudKnox 정책 합본.
+# namespace=bench-density, selector별로 nginx-density / syscall-density.
+#
+# 적용: kubectl apply -f kloudknox-policy.yaml
+# 제거: kubectl delete -f kloudknox-policy.yaml
+###############################################################################
+
+# ── Nginx Density Pods ──────────────────────────────────────────────────
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-density-nginx-network
+  namespace: bench-density
+spec:
+  selector:
+    app: nginx-density
+  network:
+    - direction: ingress
+      ports:
+        - protocol: TCP
+          port: 80
+    - direction: egress
+      ipBlock:
+        cidr: 10.244.0.0/16
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-density-nginx-process
+  namespace: bench-density
+spec:
+  selector:
+    app: nginx-density
+  process:
+    - path: /usr/sbin/nginx
+    - dir: /usr/bin/
+      recursive: false
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-density-nginx-file
+  namespace: bench-density
+spec:
+  selector:
+    app: nginx-density
+  file:
+    - dir: /etc/nginx/
+      recursive: true
+      readOnly: true
+    - dir: /var/log/nginx/
+      recursive: true
+    - dir: /usr/share/nginx/html/
+      recursive: true
+      readOnly: true
+  action: Audit
+---
+
+# ── Syscall Density Pods ────────────────────────────────────────────────
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-density-syscall-process
+  namespace: bench-density
+spec:
+  selector:
+    app: syscall-density
+  process:
+    - dir: /tools/bin/
+      recursive: false
+    - dir: /usr/bin/
+      recursive: false
+    - dir: /bin/
+      recursive: false
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-density-syscall-file
+  namespace: bench-density
+spec:
+  selector:
+    app: syscall-density
+  file:
+    - dir: /tmp/
+      recursive: true
+    - dir: /etc/
+      recursive: true
+    - dir: /dev/
+      recursive: false
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-density-syscall-network
+  namespace: bench-density
+spec:
+  selector:
+    app: syscall-density
+  network:
+    - direction: egress
+      ipBlock:
+        cidr: 10.244.0.0/16
+    - direction: ingress
+  action: Audit

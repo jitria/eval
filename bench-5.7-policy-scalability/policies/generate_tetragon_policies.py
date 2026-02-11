@@ -78,10 +78,15 @@ def generate_tracing_policies(count: int, seed: int = 42) -> list:
                             {
                                 "matchNamespaces": [
                                     {
+                                        "namespace": "Mnt",
+                                        "operator": "NotIn",
+                                        "values": ["host_ns"],
+                                    },
+                                    {
                                         "namespace": "Pid",
                                         "operator": "NotIn",
                                         "values": ["host_ns"],
-                                    }
+                                    },
                                 ],
                                 "matchArgs": [
                                     {

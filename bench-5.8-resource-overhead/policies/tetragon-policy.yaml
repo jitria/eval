@@ -1,14 +1,13 @@
 ###############################################################################
-# Tetragon TracingPolicy — 5.6 Nginx RTT
+# Tetragon TracingPolicy — 5.8 Pod Density
 #
-# Nginx의 네트워크 연결/I·O, 프로세스 실행, 파일 접근을 트레이싱.
-# KloudKnox/Falco와 동일한 카테고리로 공정한 비교.
+# 5.5 (syscall) + 5.6 (nginx) TracingPolicy 합본.
+# 중복 제거: execve는 1개로 통합.
 #
 # 카테고리:
-#   1) 네트워크: tcp_connect (outbound) + inet_csk_accept (inbound)
-#   2) 소켓 I/O: tcp_sendmsg + tcp_recvmsg (per-request, HTTP 요청마다 발동)
-#   3) 프로세스: __x64_sys_execve
-#   4) 파일: security_file_open
+#   1) 네트워크: tcp_connect, inet_csk_accept, tcp_sendmsg, tcp_recvmsg, connect
+#   2) 프로세스: __x64_sys_execve (통합)
+#   3) 파일: security_file_open, __x64_sys_openat
 #
 # 적용: kubectl apply -f tetragon-policy.yaml
 # 제거: kubectl delete -f tetragon-policy.yaml
@@ -16,7 +15,7 @@
 apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
-  name: bench-nginx-network
+  name: bench-density-network
 spec:
   kprobes:
     - call: "tcp_connect"
@@ -75,11 +74,24 @@ spec:
             - namespace: Pid
               operator: NotIn
               values: ["host_ns"]
+    - call: "__x64_sys_connect"
+      syscall: true
+      args:
+        - index: 1
+          type: "sockaddr"
+      selectors:
+        - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
+            - namespace: Pid
+              operator: NotIn
+              values: ["host_ns"]
 ---
 apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
-  name: bench-nginx-process
+  name: bench-density-process
 spec:
   kprobes:
     - call: "__x64_sys_execve"
@@ -99,7 +111,7 @@ spec:
 apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
-  name: bench-nginx-file
+  name: bench-density-file
 spec:
   kprobes:
     - call: "security_file_open"
@@ -107,6 +119,19 @@ spec:
       args:
         - index: 0
           type: "file"
+      selectors:
+        - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
+            - namespace: Pid
+              operator: NotIn
+              values: ["host_ns"]
+    - call: "__x64_sys_openat"
+      syscall: true
+      args:
+        - index: 1
+          type: "string"
       selectors:
         - matchNamespaces:
             - namespace: Mnt

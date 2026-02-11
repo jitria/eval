@@ -33,6 +33,12 @@ do_install() {
     log "DaemonSet 대기..."
     kubectl -n "${NS}" rollout status daemonset/tetragon --timeout=300s
 
+    # tetra CLI 설치
+    log "tetra CLI 설치"
+    curl -sL https://github.com/cilium/tetragon/releases/latest/download/tetra-linux-amd64.tar.gz | tar -xz
+    sudo mv tetra /usr/local/bin/
+    tetra version && log "tetra CLI 설치 완료" || warn "tetra CLI 설치 실패"
+
     log "설치 완료"
     do_status
 }

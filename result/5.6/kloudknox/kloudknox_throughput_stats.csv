@@ -1,0 +1,3 @@
+label,connections,duration,trials,avg_rps,std_rps,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_transfer_kbps,std_transfer_kbps
+kloudknox,100,30s,1,100749.62,0.00,18140000.00,0.00,26740000.00,0.00,17315.84,0.00
+kloudknox,1000,30s,1,99965.98,0.00,17450000.00,0.00,25890000.00,0.00,17182.72,0.00

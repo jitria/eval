@@ -1,0 +1,7 @@
+label,rule_count,trial,ops_sec,latency_us,N
+kloudknox,10,1,6681.9,149.6579,1000
+kloudknox,50,1,6490.0,154.0833,1000
+kloudknox,100,1,6681.5,149.6667,1000
+kloudknox,500,1,6716.6,148.8857,1000
+kloudknox,1000,1,6772.4,147.6571,1000
+kloudknox,2000,1,6246.6,160.0882,1000

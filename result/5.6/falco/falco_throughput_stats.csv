@@ -1,0 +1,3 @@
+label,connections,duration,trials,avg_rps,std_rps,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_transfer_kbps,std_transfer_kbps
+falco,100,30s,1,97405.95,0.00,18090000.00,0.00,26850000.00,0.00,16742.40,0.00
+falco,1000,30s,1,102735.05,0.00,17430000.00,0.00,25660000.00,0.00,17653.76,0.00

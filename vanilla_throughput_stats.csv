@@ -1,7 +1,0 @@
-label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_duration,std_duration
-vanilla,10,1,0.0,0.0,0.00,0.00
-vanilla,50,1,0.0,0.0,0.00,0.00
-vanilla,100,1,0.0,0.0,0.00,0.00
-vanilla,500,1,0.0,0.0,0.00,0.00
-vanilla,1000,1,0.0,0.0,0.00,0.00
-vanilla,5000,1,0.0,0.0,0.00,0.00

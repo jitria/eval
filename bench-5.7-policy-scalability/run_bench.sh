@@ -284,11 +284,28 @@ verify_policy() {
                 sleep 1
             done
             if [[ "${ok}" == "true" ]]; then
-                if kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon \
-                    -c tetragon --tail=30 2>/dev/null | grep -qi "Loaded sensor successfully"; then
+                sleep 3
+                local tpod
+                tpod=$(kubectl -n kube-system get pods -l app.kubernetes.io/name=tetragon \
+                    --field-selector=status.phase=Running \
+                    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
+                if [[ -n "${tpod}" ]]; then
+                    log "    tetra tracingpolicy list:"
+                    kubectl -n kube-system exec "${tpod}" -c tetragon -- \
+                        tetra tracingpolicy list 2>/dev/null | while IFS= read -r line; do
+                        log "      ${line}"
+                    done
+                    if kubectl -n kube-system exec "${tpod}" -c tetragon -- \
+                        tetra tracingpolicy list 2>/dev/null | grep -qi "error"; then
+                        warn "    TracingPolicy error state 감지"; return 1
+                    fi
                     log "    TracingPolicy 센서 로드 확인"
                 else
-                    warn "    TracingPolicy 센서 로드 로그 미확인 (리소스는 존재)"
+                    warn "    Tetragon Pod 미발견 — 로그로 폴백"
+                    kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon \
+                        -c tetragon --tail=30 2>/dev/null | grep -qi "Loaded sensor" \
+                        && log "    센서 로드 로그 확인" \
+                        || warn "    센서 로드 로그 미확인"
                 fi
             else
                 warn "  TracingPolicy 리소스 미생성"; return 1

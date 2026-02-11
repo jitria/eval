@@ -34,7 +34,6 @@ THREADS="${THREADS:-4}"
 COOLDOWN="${COOLDOWN:-10}"
 RPS_LIST="${RPS_LIST:-1000 5000 10000}"
 CONN_LIST="${CONN_LIST:-10 50 100 500 1000}"
-MAX_RPS="${MAX_RPS:-100000}"       # throughput 모드: wrk2 -R 상한 (충분히 높게)
 
 SERVER_URL="http://nginx-bench-svc.bench-nginx.svc.cluster.local:80/"
 WRK_POD="wrk2-client"
@@ -90,11 +89,28 @@ verify_policy() {
                 sleep 1
             done
             if [[ "${ok}" == "true" ]]; then
-                if kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon \
-                    -c tetragon --tail=30 2>/dev/null | grep -qi "Loaded sensor successfully"; then
+                sleep 3
+                local tpod
+                tpod=$(kubectl -n kube-system get pods -l app.kubernetes.io/name=tetragon \
+                    --field-selector=status.phase=Running \
+                    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
+                if [[ -n "${tpod}" ]]; then
+                    log "  tetra tracingpolicy list:"
+                    kubectl -n kube-system exec "${tpod}" -c tetragon -- \
+                        tetra tracingpolicy list 2>/dev/null | while IFS= read -r line; do
+                        log "    ${line}"
+                    done
+                    if kubectl -n kube-system exec "${tpod}" -c tetragon -- \
+                        tetra tracingpolicy list 2>/dev/null | grep -qi "error"; then
+                        warn "  TracingPolicy error state 감지"; return 1
+                    fi
                     log "  TracingPolicy 센서 로드 확인"
                 else
-                    warn "  TracingPolicy 센서 로드 로그 미확인 (리소스는 존재)"
+                    warn "  Tetragon Pod 미발견 — 로그로 폴백"
+                    kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon \
+                        -c tetragon --tail=30 2>/dev/null | grep -qi "Loaded sensor" \
+                        && log "  센서 로드 로그 확인" \
+                        || warn "  센서 로드 로그 미확인"
                 fi
             else
                 warn "TracingPolicy 리소스 미생성"; return 1
@@ -262,8 +278,8 @@ compute_cross_trial_stats() {
     done
 }
 
-# ── wrk2 출력 파싱 (처리량 모드, -R MAX_RPS) ──────────────────────────
-# wrk2 출력 형식에 맞춰 파싱 (50.000%, #[Mean ...] 등)
+# ── wrk 출력 파싱 (처리량 모드, closed-loop) ─────────────────────────
+# wrk2 open-loop (50.000%, #[Mean]) 및 closed-loop (50%, Thread Stats) 형식 모두 지원
 # 출력: rps,p50_us,p75_us,p90_us,p99_us,lat_avg_us,lat_sd_us,total_reqs,transfer_kbps,errors
 parse_wrk_throughput() {
     local file="$1"
@@ -283,10 +299,12 @@ parse_wrk_throughput() {
         if (val ~ /B$/)  { gsub(/B$/,  "", val); return val / 1024 }
         return 0
     }
-    /^ *50\.000%/  { p50  = to_us($2) }
-    /^ *75\.000%/  { p75  = to_us($2) }
-    /^ *90\.000%/  { p90  = to_us($2) }
-    /^ *99\.000%/  { p99  = to_us($2) }
+    # 퍼센타일: wrk2 "50.000%" 및 wrk "50%" 모두 매칭
+    /^ *50(\.0+)?%/  { p50  = to_us($2) }
+    /^ *75(\.0+)?%/  { p75  = to_us($2) }
+    /^ *90(\.0+)?%/  { p90  = to_us($2) }
+    /^ *99(\.0+)?%/  { p99  = to_us($2) }
+    # wrk2 open-loop: #[Mean = ..., StdDeviation = ...] (단위: ms)
     /^#\[Mean/ {
         gsub(/[^0-9.]/, " ", $0)
         split($0, vals, " ")
@@ -294,10 +312,15 @@ parse_wrk_throughput() {
         for (i = 1; i <= length(vals); i++) {
             if (vals[i]+0 > 0) {
                 found++
-                if (found == 1) lat_avg_ms = vals[i]
-                if (found == 2) { lat_sd_ms = vals[i]; break }
+                if (found == 1) lat_avg = vals[i] * 1000
+                if (found == 2) { lat_sd = vals[i] * 1000; break }
             }
         }
+    }
+    # wrk closed-loop: Thread Stats Latency 행 (단위 접미사 포함)
+    /^ *Latency/ && !/Distribution/ {
+        lat_avg = to_us($2)
+        lat_sd  = to_us($3)
     }
     /Requests\/sec:/  { rps = $2 }
     /Transfer\/sec:/  { tput = to_kbps($2) }
@@ -308,8 +331,6 @@ parse_wrk_throughput() {
         }
     }
     END {
-        lat_avg = lat_avg_ms * 1000
-        lat_sd  = lat_sd_ms * 1000
         printf "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%d\n",
             rps+0, p50+0, p75+0, p90+0, p99+0, lat_avg+0, lat_sd+0, reqs+0, tput+0, errs+0
     }
@@ -481,8 +502,8 @@ do_throughput() {
             local remote="/results/${LABEL}_${tag}.txt"
             local local_f="${RESULT_HOST}/${LABEL}_${tag}.txt"
 
-            log "  CONNS=${conns} (max RPS, -R${MAX_RPS})"
-            wrk_exec "/tools/bin/wrk -t${THREADS} -c${conns} -d${DURATION} -R${MAX_RPS} --latency ${SERVER_URL} > ${remote} 2>&1" || true
+            log "  CONNS=${conns} (max throughput, -R1000000)"
+            wrk_exec "/tools/bin/wrk -t${THREADS} -c${conns} -d${DURATION} -R1000000 --latency ${SERVER_URL} > ${remote} 2>&1" || true
 
             kubectl cp "${NS}/${WRK_POD}:${remote}" "${local_f}" 2>/dev/null || \
                 wrk_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true

@@ -1,0 +1,3 @@
+label,connections,duration,trials,avg_rps,std_rps,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_transfer_kbps,std_transfer_kbps
+tetragon,100,30s,1,82807.94,0.00,18420000.00,0.00,27280000.00,0.00,14233.60,0.00
+tetragon,1000,30s,1,82050.77,0.00,18040000.00,0.00,26430000.00,0.00,14100.48,0.00

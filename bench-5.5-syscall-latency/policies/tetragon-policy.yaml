@@ -3,7 +3,7 @@
 #
 # execve, openat, connect syscall을 Tetragon이 트레이싱하도록 정책 정의.
 # kprobe 기반으로 syscall entry를 후킹하여 메타데이터 수집.
-# 컨테이너 프로세스만 대상 (호스트 PID 네임스페이스 제외).
+# 컨테이너 프로세스만 대상 (호스트 Mnt/Pid 네임스페이스 제외).
 #
 # 적용: kubectl apply -f tetragon-policy.yaml
 # 제거: kubectl delete -f tetragon-policy.yaml
@@ -21,10 +21,12 @@ spec:
           type: "string"
       selectors:
         - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
             - namespace: Pid
               operator: NotIn
-              values:
-                - "host_ns"
+              values: ["host_ns"]
 ---
 apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
@@ -39,10 +41,12 @@ spec:
           type: "string"
       selectors:
         - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
             - namespace: Pid
               operator: NotIn
-              values:
-                - "host_ns"
+              values: ["host_ns"]
 ---
 apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
@@ -57,7 +61,9 @@ spec:
           type: "sockaddr"
       selectors:
         - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
             - namespace: Pid
               operator: NotIn
-              values:
-                - "host_ns"
+              values: ["host_ns"]

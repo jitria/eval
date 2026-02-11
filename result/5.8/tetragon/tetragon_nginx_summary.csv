@@ -1,0 +1,2 @@
+label,trial,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,avg_node_cpu,std_node_cpu,avg_node_mem,std_node_mem,samples
+tetragon,1,268.12,2.58,124.8,0.1,11.2,0.3,1281,4,6
