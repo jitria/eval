@@ -2,15 +2,15 @@
 """
 generate_tetragon_policies.py — Tetragon TracingPolicy 규칙 생성기
 
-connect syscall 경로에 대한 네트워크 트레이싱 규칙을 Tetragon TracingPolicy 형식으로 생성.
-규칙 수를 10~5000까지 증가시켜 BPF map 기반 룩업 오버헤드를 측정.
+N개의 **별도 TracingPolicy**를 생성하여, 각각이 독립된 kprobe를 부착하도록 함.
+Tetragon은 TracingPolicy당 별도 sensor/kprobe를 생성하므로 (cross-policy merging 없음),
+N개 정책 = N개 kprobe → per-syscall 오버헤드가 O(N)으로 증가.
 
-Tetragon은 matchArgs의 values 리스트를 BPF map으로 관리하므로,
-규칙 수 증가에 따른 오버헤드가 KloudKnox와 유사한 O(log N) 패턴을 보일 것으로 예상.
+이를 통해 kprobe 기반 아키텍처의 정책 스케일링 특성을 측정.
 
 사용법:
     python3 generate_tetragon_policies.py --count 100 --output rules_100.yaml
-    python3 generate_tetragon_policies.py --count 5000 --output rules_5000.yaml
+    python3 generate_tetragon_policies.py --count 1000 --output rules_1000.yaml
 """
 
 import argparse
@@ -48,25 +48,18 @@ def generate_cidr_list(count: int, seed: int = 42) -> list:
 
 def generate_tracing_policies(count: int, seed: int = 42) -> list:
     """
-    Tetragon TracingPolicy YAML 문서 리스트 생성.
-    matchArgs에 CIDR 값을 넣어 connect syscall 필터링.
-    CRD 크기 제한을 고려하여 500개 단위로 분할.
+    N개의 별도 TracingPolicy 생성.
+    각 TracingPolicy가 독립된 kprobe를 부착하여 connect syscall을 감시.
     """
     cidrs = generate_cidr_list(count, seed)
     policies = []
-    chunk_size = 500
 
-    for i in range(0, len(cidrs), chunk_size):
-        chunk = cidrs[i : i + chunk_size]
-        idx = i // chunk_size
-
+    for i, cidr in enumerate(cidrs):
         policy = {
             "apiVersion": "cilium.io/v1alpha1",
             "kind": "TracingPolicy",
             "metadata": {
-                "name": f"bench-policy-scale-{count}-{idx}"
-                if len(cidrs) > chunk_size
-                else f"bench-policy-scale-{count}",
+                "name": f"bench-scale-{i:04d}",
             },
             "spec": {
                 "kprobes": [
@@ -92,7 +85,7 @@ def generate_tracing_policies(count: int, seed: int = 42) -> list:
                                     {
                                         "index": 1,
                                         "operator": "Prefix",
-                                        "values": chunk,
+                                        "values": [cidr],
                                     }
                                 ],
                             }
@@ -108,7 +101,7 @@ def generate_tracing_policies(count: int, seed: int = 42) -> list:
 
 def main():
     parser = argparse.ArgumentParser(description="Tetragon TracingPolicy 규칙 생성기")
-    parser.add_argument("--count", type=int, required=True, help="생성할 규칙 수")
+    parser.add_argument("--count", type=int, required=True, help="생성할 TracingPolicy 수")
     parser.add_argument("--output", type=str, required=True, help="출력 YAML 파일 경로")
     parser.add_argument("--seed", type=int, default=42, help="랜덤 시드")
     args = parser.parse_args()
@@ -118,11 +111,7 @@ def main():
     with open(args.output, "w") as f:
         yaml.dump_all(policies, f, default_flow_style=False, allow_unicode=True)
 
-    total_cidrs = sum(
-        len(p["spec"]["kprobes"][0]["selectors"][0]["matchArgs"][0]["values"])
-        for p in policies
-    )
-    print(f"[+] Tetragon: {total_cidrs} 규칙, {len(policies)} TracingPolicy → {args.output}")
+    print(f"[+] Tetragon: {len(policies)} TracingPolicy (각 1 kprobe) → {args.output}")
 
 
 if __name__ == "__main__":

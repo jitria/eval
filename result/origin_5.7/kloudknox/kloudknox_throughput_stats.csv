@@ -1,6 +1,0 @@
-label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_latency_us,std_latency_us
-kloudknox,10,3,1947.1,62.7,514.13,16.93
-kloudknox,50,3,1967.2,18.3,508.38,4.72
-kloudknox,100,3,1964.0,24.5,509.25,6.32
-kloudknox,500,3,1997.1,1.6,500.73,0.39
-kloudknox,1000,3,1979.4,23.5,505.29,6.06

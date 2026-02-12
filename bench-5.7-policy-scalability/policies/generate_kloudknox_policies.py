@@ -2,12 +2,15 @@
 """
 generate_kloudknox_policies.py — KloudKnoxPolicy CRD 규칙 생성기
 
-connect syscall 경로에 대한 네트워크 정책 규칙을 KloudKnoxPolicy CRD 형식으로 생성.
-규칙 수를 10~5000까지 증가시켜 LPM/Hash Map 룩업 오버헤드를 측정.
+N개의 **별도 KloudKnoxPolicy CRD**를 생성.
+KloudKnox agent는 여러 CRD의 네트워크 규칙을 BPF LPM/Hash Map으로 merge하므로,
+CRD 수가 증가해도 per-syscall lookup 비용은 O(log N) / O(1) 유지.
+
+이를 통해 BPF map 기반 아키텍처의 정책 스케일링 효율성을 측정.
 
 사용법:
     python3 generate_kloudknox_policies.py --count 100 --output rules_100.yaml
-    python3 generate_kloudknox_policies.py --count 5000 --output rules_5000.yaml
+    python3 generate_kloudknox_policies.py --count 1000 --output rules_1000.yaml
 """
 
 import argparse
@@ -50,27 +53,23 @@ def generate_network_rules(count: int, seed: int = 42) -> list:
 
 def generate_policy_yaml(count: int, namespace: str, seed: int = 42) -> list:
     """
-    KloudKnoxPolicy CRD YAML 문서 리스트 생성.
-    K8s CRD는 단일 리소스 크기 제한이 있으므로, 규칙 500개 단위로 분할.
+    N개의 별도 KloudKnoxPolicy CRD 생성.
+    각 CRD가 1개의 네트워크 규칙을 포함.
     """
     network_rules = generate_network_rules(count, seed)
     policies = []
-    chunk_size = 500
 
-    for i in range(0, len(network_rules), chunk_size):
-        chunk = network_rules[i : i + chunk_size]
-        idx = i // chunk_size
+    for i, rule in enumerate(network_rules):
         policy = {
             "apiVersion": "security.boanlab.com/v1",
             "kind": "KloudKnoxPolicy",
             "metadata": {
-                "name": f"bench-policy-scale-{count}-{idx}" if len(network_rules) > chunk_size
-                else f"bench-policy-scale-{count}",
+                "name": f"bench-scale-{i:04d}",
                 "namespace": namespace,
             },
             "spec": {
                 "selector": {"app": "workload"},
-                "network": chunk,
+                "network": [rule],
                 "action": "Audit",
             },
         }
@@ -81,7 +80,7 @@ def generate_policy_yaml(count: int, namespace: str, seed: int = 42) -> list:
 
 def main():
     parser = argparse.ArgumentParser(description="KloudKnoxPolicy CRD 규칙 생성기")
-    parser.add_argument("--count", type=int, required=True, help="생성할 규칙 수")
+    parser.add_argument("--count", type=int, required=True, help="생성할 KloudKnoxPolicy 수")
     parser.add_argument("--output", type=str, required=True, help="출력 YAML 파일 경로")
     parser.add_argument("--namespace", type=str, default="bench-policy", help="네임스페이스")
     parser.add_argument("--seed", type=int, default=42, help="랜덤 시드")
@@ -92,8 +91,7 @@ def main():
     with open(args.output, "w") as f:
         yaml.dump_all(policies, f, default_flow_style=False, allow_unicode=True)
 
-    total_rules = sum(len(p["spec"]["network"]) for p in policies)
-    print(f"[+] KloudKnox: {total_rules} 규칙, {len(policies)} CRD → {args.output}")
+    print(f"[+] KloudKnox: {len(policies)} CRD (각 1 규칙) → {args.output}")
 
 
 if __name__ == "__main__":

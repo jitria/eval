@@ -267,35 +267,36 @@ verify_policy() {
                 || { warn "  Falco 룰 파일 미확인"; return 1; }
             ;;
         tetragon)
-            for _i in $(seq 1 15); do
-                if kubectl get tracingpolicy -o name 2>/dev/null | grep -q .; then
+            # kubectl apply 직후 첫 번째 리소스 존재 확인 (전체 list 대신 단건 조회)
+            for _i in $(seq 1 30); do
+                if kubectl get tracingpolicy bench-scale-0000 2>/dev/null | grep -q "bench-scale"; then
                     ok=true; break
                 fi
                 sleep 1
             done
             if [[ "${ok}" == "true" ]]; then
-                sleep 3
+                log "    TracingPolicy K8s 리소스 확인 (bench-scale-0000 존재)"
+
+                # tetra tracingpolicy list로 센서 실제 로드 대기
                 local tpod
                 tpod=$(kubectl -n kube-system get pods -l app.kubernetes.io/name=tetragon \
                     --field-selector=status.phase=Running \
                     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
                 if [[ -n "${tpod}" ]]; then
-                    log "    tetra tracingpolicy list:"
-                    kubectl -n kube-system exec "${tpod}" -c tetragon -- \
-                        tetra tracingpolicy list 2>/dev/null | while IFS= read -r line; do
-                        log "      ${line}"
+                    # 적용한 정책 수 (load_rules에서 넘긴 count)
+                    local expect="${1:-0}"
+                    for _i in $(seq 1 180); do
+                        local loaded
+                        loaded=$(kubectl -n kube-system exec "${tpod}" -c tetragon -- \
+                            tetra tracingpolicy list 2>/dev/null | grep -c "enabled" || true)
+                        loaded=${loaded:-0}
+                        if [[ "${loaded}" -ge "${expect}" ]]; then
+                            log "    Tetragon 센서 ${loaded}개 로드 완료"
+                            break
+                        fi
+                        [[ $(( _i % 10 )) -eq 0 ]] && log "    센서 로드 중 (${loaded}/${expect})..."
+                        sleep 2
                     done
-                    if kubectl -n kube-system exec "${tpod}" -c tetragon -- \
-                        tetra tracingpolicy list 2>/dev/null | grep -qi "error"; then
-                        warn "    TracingPolicy error state 감지"; return 1
-                    fi
-                    log "    TracingPolicy 센서 로드 확인"
-                else
-                    warn "    Tetragon Pod 미발견 — 로그로 폴백"
-                    kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon \
-                        -c tetragon --tail=30 2>/dev/null | grep -qi "Loaded sensor" \
-                        && log "    센서 로드 로그 확인" \
-                        || warn "    센서 로드 로그 미확인"
                 fi
             else
                 warn "  TracingPolicy 리소스 미생성"; return 1
@@ -324,22 +325,49 @@ load_rules() {
             kubectl apply -f "${RESULT_HOST}/rules/tetragon_${count}.yaml"
             ;;
     esac
-    verify_policy
+    verify_policy "${count}"
 }
 
 unload_rules() {
     local count="$1"
+    local wait_sec=$(( count > 100 ? 10 : 3 ))
     case "${LABEL}" in
         kloudknox)
             kubectl delete -f "${RESULT_HOST}/rules/kloudknox_${count}.yaml" --ignore-not-found 2>/dev/null || true
-            sleep 2
+            sleep "${wait_sec}"
             ;;
         falco)
             # 다음 load_rules에서 덮어쓰므로 별도 언로드 불필요
             ;;
         tetragon)
             kubectl delete -f "${RESULT_HOST}/rules/tetragon_${count}.yaml" --ignore-not-found 2>/dev/null || true
-            sleep 2
+            sleep "${wait_sec}"
+
+            # 1) K8s 리소스 제거 확인 (단건 조회로 확인)
+            for _i in $(seq 1 60); do
+                if ! kubectl get tracingpolicy bench-scale-0000 2>/dev/null | grep -q "bench-scale"; then
+                    break
+                fi
+                log "  K8s TracingPolicy 제거 대기..."
+                sleep 2
+            done
+
+            # 2) Tetragon 내부 센서 제거 확인 (tetra tracingpolicy list)
+            local tpod
+            tpod=$(kubectl -n kube-system get pods -l app.kubernetes.io/name=tetragon \
+                --field-selector=status.phase=Running \
+                -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
+            if [[ -n "${tpod}" ]]; then
+                for _i in $(seq 1 60); do
+                    local sensor_count
+                    sensor_count=$(kubectl -n kube-system exec "${tpod}" -c tetragon -- \
+                        tetra tracingpolicy list 2>/dev/null | grep -c "bench-scale" || true)
+                    sensor_count=${sensor_count:-0}
+                    [[ "${sensor_count}" -eq 0 ]] && break
+                    log "  Tetragon 센서 언로드 대기 (남은: ${sensor_count})..."
+                    sleep 3
+                done
+            fi
             ;;
     esac
 }
@@ -526,6 +554,10 @@ do_throughput() {
         work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
         sleep 1
         work_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
+        sleep 1
+
+        # bw_tcp 재시작 후 워밍업 (Trial 1 아웃라이어 방지)
+        work_exec "${PIN_CMD} /tools/bin/lat_connect -N 200 ${SERVER_IP} >/dev/null 2>&1" || true
         sleep 1
 
         [[ "${LABEL}" != "vanilla" ]] && load_rules "${rule_count}"
