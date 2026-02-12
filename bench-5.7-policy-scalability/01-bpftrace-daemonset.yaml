@@ -27,12 +27,13 @@ data:
   monitor_agent.sh: |
     #!/usr/bin/env bash
     ###########################################################################
-    # monitor_agent.sh — 에이전트 CPU/Memory 샘플링 (5.7 Policy Scalability)
+    # monitor_agent.sh — 에이전트 + 노드 CPU/Memory 샘플링 (5.7 Policy Scalability)
     #
-    # 5.8 monitor_in_pod.sh 로직 재활용 (경량화):
-    #   - 무한 루프 + SIGTERM 종료 (고정 샘플 수 대신)
-    #   - rule_count 기반 (pod_count 대신)
-    #   - 노드 전체 CPU/메모리는 생략 (에이전트 오버헤드에 집중)
+    # 수집 항목:
+    #   - 에이전트 CPU% (/proc/<pid>/stat utime+stime)
+    #   - 에이전트 MEM MB (/proc/<pid>/status VmRSS)
+    #   - 노드 전체 CPU% (/proc/stat → 100 - idle%)
+    #   - 노드 커널 CPU% (/proc/stat → system + irq + softirq)
     #
     # 인자:
     #   $1 = agent_name    (kloudknox|falco|tetragon)
@@ -40,7 +41,7 @@ data:
     #   $3 = rule_count     (현재 규칙 수)
     #   $4 = output_file    (CSV 출력 경로)
     #
-    # CSV: timestamp,rule_count,agent_cpu_pct,agent_mem_mb
+    # CSV: timestamp,rule_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_sys_pct
     ###########################################################################
     set -euo pipefail
 
@@ -49,7 +50,7 @@ data:
     RULE_COUNT="${3:-0}"
     OUTPUT="${4:-/results/monitor.csv}"
 
-    echo "timestamp,rule_count,agent_cpu_pct,agent_mem_mb" > "${OUTPUT}"
+    echo "timestamp,rule_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_sys_pct" > "${OUTPUT}"
 
     # ── 에이전트 PID 탐색 (3단계 폴백) ──────────────────────────────
     AGENT_PID=""
@@ -69,6 +70,7 @@ data:
     fi
 
     # ── 헬퍼 함수 ────────────────────────────────────────────────────
+    # /proc/stat → user nice system idle iowait irq softirq steal (8 fields)
     read_cpu_stat() {
         awk '/^cpu / {print $2,$3,$4,$5,$6,$7,$8,$9}' /proc/stat
     }
@@ -111,22 +113,41 @@ data:
         curr_stat=$(read_cpu_stat)
         curr_agent=$(read_agent_ticks "${AGENT_PID}")
 
-        # 에이전트 CPU% (per-core 기준, top 방식)
-        agent_cpu="0.00"
-        if [[ -n "${AGENT_PID}" ]]; then
-            agent_cpu=$(echo "${prev_agent}" "${curr_agent}" "${prev_stat}" "${curr_stat}" "${NPROC}" | awk '{
-                da=$2-$1
-                pt=$3+$4+$5+$6+$7+$8+$9+$10
-                ct=$11+$12+$13+$14+$15+$16+$17+$18
-                dt=ct-pt; nproc=$19
-                if(dt>0) printf "%.2f",da/dt*100*nproc; else printf "0.00"
-            }')
-        fi
+        # 에이전트 CPU% + 노드 CPU%/sys% 를 한번에 계산
+        # 입력: prev_agent curr_agent prev_stat(8) curr_stat(8) NPROC
+        # /proc/stat fields: user nice system idle iowait irq softirq steal
+        read -r agent_cpu node_cpu node_sys <<< $(echo "${prev_agent}" "${curr_agent}" "${prev_stat}" "${curr_stat}" "${NPROC}" | awk '{
+            da = $2 - $1
+
+            # prev: $3=user $4=nice $5=sys $6=idle $7=iowait $8=irq $9=softirq $10=steal
+            # curr: $11=user $12=nice $13=sys $14=idle $15=iowait $16=irq $17=softirq $18=steal
+            pt = $3+$4+$5+$6+$7+$8+$9+$10
+            ct = $11+$12+$13+$14+$15+$16+$17+$18
+            dt = ct - pt
+            nproc = $19
+
+            # agent CPU% (per-core, top style)
+            if (dt > 0) acpu = da/dt*100*nproc; else acpu = 0
+
+            # node idle delta
+            d_idle = ($14-$6) + ($15-$7)
+            # node sys delta (system + irq + softirq)
+            d_sys = ($13-$5) + ($16-$8) + ($17-$9)
+
+            if (dt > 0) {
+                ncpu = (1 - d_idle/dt) * 100
+                nsys = d_sys/dt * 100
+            } else {
+                ncpu = 0; nsys = 0
+            }
+
+            printf "%.2f %.2f %.2f", acpu, ncpu, nsys
+        }')
 
         # 에이전트 메모리 (VmRSS, KB→MB)
         agent_mem=$(read_agent_mem_mb "${AGENT_PID}")
 
-        echo "${ts},${RULE_COUNT},${agent_cpu},${agent_mem}" >> "${OUTPUT}"
+        echo "${ts},${RULE_COUNT},${agent_cpu},${agent_mem},${node_cpu},${node_sys}" >> "${OUTPUT}"
 
         prev_stat="${curr_stat}"
         prev_agent="${curr_agent}"

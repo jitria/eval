@@ -338,7 +338,7 @@ compute_resource_summary() {
     [[ -z "${AGENT_NAME}" ]] && return 0
 
     local out="${RESULT_HOST}/${LABEL}_resource.csv"
-    echo "label,rule_count,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,samples" > "${out}"
+    echo "label,rule_count,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,avg_node_cpu,std_node_cpu,avg_node_sys,std_node_sys,samples" > "${out}"
 
     for rc in ${RULE_COUNTS}; do
         # 모든 trial의 raw CSV를 합산
@@ -350,17 +350,22 @@ compute_resource_summary() {
         [[ -z "${merged}" ]] && continue
 
         awk -F',' -v label="${LABEL}" -v rc="${rc}" '
-        FNR > 1 && NF >= 4 {
+        FNR > 1 && NF >= 6 {
             n++
             sc += $3; sqc += $3*$3
             sm += $4; sqm += $4*$4
+            snc += $5; sqnc += $5*$5
+            sns += $6; sqns += $6*$6
         }
         END {
             if (n == 0) exit
-            ac = sc/n; am = sm/n
+            ac = sc/n; am = sm/n; anc = snc/n; ans = sns/n
             vc = sqc/n - ac*ac; sdc = sqrt(vc > 0 ? vc : 0)
             vm = sqm/n - am*am; sdm = sqrt(vm > 0 ? vm : 0)
-            printf "%s,%s,%.2f,%.2f,%.1f,%.1f,%d\n", label, rc, ac, sdc, am, sdm, n
+            vnc = sqnc/n - anc*anc; sdnc = sqrt(vnc > 0 ? vnc : 0)
+            vns = sqns/n - ans*ans; sdns = sqrt(vns > 0 ? vns : 0)
+            printf "%s,%s,%.2f,%.2f,%.1f,%.1f,%.2f,%.2f,%.2f,%.2f,%d\n",
+                label, rc, ac, sdc, am, sdm, anc, sdnc, ans, sdns, n
         }' ${merged} >> "${out}" || true
     done
 
