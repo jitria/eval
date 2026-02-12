@@ -1,0 +1,1349 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0000
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.48.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0001
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.114.71.48/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0002
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.0.0.0/8
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0003
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.47.111.0/24
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0004
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.0.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0005
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.229.142.3/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0006
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.81.0.0/16
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0007
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.47.0.0/16
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0008
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.176.135.16/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0009
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.150.185.96/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0010
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.35.23.116/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0011
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.148.40.119/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0012
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.51.192.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0013
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.186.0.0/16
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0014
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.107.136.0/24
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0015
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.87.112.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0016
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.194.138.112/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0017
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.166.28.117/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0018
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.16.0.0/16
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0019
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.32.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0020
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.240.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0021
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.135.71.112/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0022
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.134.0.0/16
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0023
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.24.56.64/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0024
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.81.208.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0025
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.195.239.0/24
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0026
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.5.58.136/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0027
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.174.48.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0028
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.80.232.0/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0029
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.134.91.54/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0030
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.152.0.0/16
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0031
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.82.0.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0032
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.9.57.185/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0033
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.144.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0034
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.40.43.248/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0035
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.35.64.64/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0036
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.243.84.0/24
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0037
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.216.108.96/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0038
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.159.192.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0039
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.224.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0040
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.32.173.0/24
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0041
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.169.0.0/16
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0042
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.248.109.64/28
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0043
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.242.124.242/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0044
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.220.176.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0045
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.192.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0046
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.96.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0047
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.216.80.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0048
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.127.38.226/32
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0049
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.121.80.0/20
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true

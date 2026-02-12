@@ -1,0 +1,5 @@
+label,streams,trials,avg_sender_gbps,std_sender_gbps,avg_receiver_gbps,std_receiver_gbps,avg_retransmits,std_retransmits
+tetragon,16,2,20.3924,0.0132,20.3924,0.0132,1.0,1.0
+tetragon,32,2,20.2838,0.1351,20.2837,0.1351,0.0,0.0
+tetragon,64,2,21.0026,0.0193,21.0024,0.0193,0.0,0.0
+tetragon,128,2,18.8483,0.1260,18.8477,0.1260,0.0,0.0

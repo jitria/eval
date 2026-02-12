@@ -1,0 +1,5 @@
+label,streams,trials,avg_sender_gbps,std_sender_gbps,avg_receiver_gbps,std_receiver_gbps,avg_retransmits,std_retransmits
+vanilla,16,2,20.5206,0.0188,20.5205,0.0188,0.0,0.0
+vanilla,32,2,20.2986,0.0602,20.2984,0.0602,0.0,0.0
+vanilla,64,2,20.8526,0.0026,20.8523,0.0026,0.0,0.0
+vanilla,128,2,18.9422,0.0312,18.9416,0.0312,0.0,0.0

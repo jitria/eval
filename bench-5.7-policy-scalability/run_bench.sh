@@ -1,27 +1,21 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.7 Policy Scalability (v4 - 레이턴시 + 처리량 분리)
+# run_bench.sh — 5.7 Policy Scalability (v6 - ab 기반으로 전환)
 #
-# 개선 사항 (v3 → v4):
-#   - latency/throughput 모드 분리
-#   - throughput: 규칙 수별 connect ops/sec 측정
-#   - 인라인 stddev 표시
-#
-# 측정 모드:
-#   latency    — bpftrace로 connect syscall ns 단위 지연시간 (규칙 수별)
-#   throughput — lat_connect 반복 실행, 규칙 수별 ops/sec 측정
+# 개선 사항 (v5 → v6):
+#   - lmbench(lat_connect + bpftrace) → ab(Apache Bench + Nginx)로 전환
+#   - latency/throughput 분리 → 단일 run 모드 (ab가 둘 다 제공)
+#   - 에이전트 CPU/Memory 모니터링 유지 (bpftrace DaemonSet의 privileged pod)
 #
 # 아키텍처:
-#   compute-node-1 (클라이언트 + 서버, localhost)
-#   ├── bpftrace DaemonSet (privileged, hostPID)
-#   │   └── trace_connect.bt (comm=="lat_connect" + printf)
-#   └── workload Pod
-#       ├── bw_tcp -s (TCP accept 서버, localhost)
-#       └── lat_connect 127.0.0.1
+#   compute-node-1 (클라이언트)
+#   ├── bpftrace DaemonSet (privileged, hostPID) — monitor_agent.sh 실행
+#   └── ab-client Pod — ab 실행
+#   compute-node-2 (서버)
+#   └── Nginx Deployment — HTTP 서버
 #
 # 사용법:
-#   bash run_bench.sh latency    [vanilla|kloudknox|falco|tetragon]
-#   bash run_bench.sh throughput [vanilla|kloudknox|falco|tetragon]
+#   bash run_bench.sh run     [vanilla|kloudknox|falco|tetragon]
 #   bash run_bench.sh deploy
 #   bash run_bench.sh cleanup
 ###############################################################################
@@ -32,21 +26,29 @@ NS="bench-policy"
 LABEL="${2:-vanilla}"
 RESULT_HOST="$(dirname "${SCRIPT_DIR}")/result/5.7/${LABEL}"
 TRIALS="${TRIALS:-3}"
-WARMUP_SEC="${WARMUP_SEC:-30}"
-LMBENCH_REPS="${LMBENCH_REPS:-10}"
-PIN_CORE="${PIN_CORE:-2}"
 COOLDOWN="${COOLDOWN:-5}"
-TPUT_DURATION="${TPUT_DURATION:-10}"  # 처리량 측정 시간 (초, 외부 루프 미사용)
-TPUT_N="${TPUT_N:-1000}"             # lat_connect -N 반복 횟수
-RULE_COUNTS="${RULE_COUNTS:-10 50 100 500 1000 5000}"
+RULE_COUNTS="${RULE_COUNTS:-10 50 100 250}"
+MONITOR_INTERVAL="${MONITOR_INTERVAL:-1}"
+
+# ab 파라미터
+TOTAL_REQUESTS="${TOTAL_REQUESTS:-500000}"
+CONCURRENCY="${CONCURRENCY:-1000}"
+WARMUP_REQUESTS="${WARMUP_REQUESTS:-1000}"
+
+# 에이전트 이름 매핑 (vanilla이면 빈 문자열 → 모니터링 스킵)
+case "${LABEL}" in
+    kloudknox) AGENT_NAME="kloudknox" ;;
+    falco)     AGENT_NAME="falco" ;;
+    tetragon)  AGENT_NAME="tetragon" ;;
+    *)         AGENT_NAME="" ;;
+esac
 
 log()  { echo -e "\e[1;36m[5.7]\e[0m $*"; }
 warn() { echo -e "\e[1;33m[5.7]\e[0m $*"; }
 
 TRACER_POD=""
-WORKLOAD_POD="workload"
-SERVER_IP="127.0.0.1"
-PIN_CMD=""
+AB_POD="ab-client"
+SERVER_URL="http://nginx-svc.bench-policy.svc.cluster.local:80/"
 
 get_tracer_pod() {
     kubectl -n "${NS}" get pods -l app=bpftrace-tracer \
@@ -54,171 +56,77 @@ get_tracer_pod() {
 }
 
 tracer_exec() { kubectl -n "${NS}" exec "${TRACER_POD}" -- bash -c "$1" 2>&1; }
-work_exec()   { kubectl -n "${NS}" exec "${WORKLOAD_POD}" -- bash -c "$1" 2>&1; }
+ab_exec()     { kubectl -n "${NS}" exec "${AB_POD}" -- bash -c "ulimit -n 65535; $1" 2>&1; }
 
-# ── CPU pinning 설정 ─────────────────────────────────────────────────
-setup_cpu_pin() {
-    if work_exec "taskset -c ${PIN_CORE} echo ok" &>/dev/null; then
-        PIN_CMD="taskset -c ${PIN_CORE}"
-        log "CPU pinning 활성화: core ${PIN_CORE}"
-    else
-        warn "taskset 사용 불가 — CPU pinning 없이 실행"
-        PIN_CMD=""
-    fi
-}
+# ── ab 출력 파싱 ──────────────────────────────────────────────────────
+# 출력: total_reqs,rps,mean_us,p50_us,p90_us,p95_us,p99_us,max_us,failed,transfer_kbps
+# ab는 ms 단위 → μs 변환 (x1000)
+parse_ab_result() {
+    local file="$1"
 
-# ── 통계 계산 (raw / iqr) ────────────────────────────────────────────
-compute_stats() {
-    local raw_file="$1" filter="${2:-raw}"
-    local sorted="${raw_file}.sorted"
-
-    grep -E '^[0-9]+$' "${raw_file}" | sort -n > "${sorted}"
-    local count
-    count=$(wc -l < "${sorted}")
-
-    if [[ ${count} -eq 0 ]]; then
-        echo "0,0,0,0,0,0,0"
+    if [[ ! -f "${file}" ]] || [[ ! -s "${file}" ]]; then
+        echo "0,0,0,0,0,0,0,0,0,0"
         return
     fi
 
-    if [[ "${filter}" == "iqr" ]]; then
-        awk '
-        { a[NR] = $1 }
-        END {
-            n = NR
-            q1_idx = int(n * 0.25); if (q1_idx < 1) q1_idx = 1
-            q3_idx = int(n * 0.75); if (q3_idx < 1) q3_idx = 1
-            q1 = a[q1_idx]; q3 = a[q3_idx]
-            iqr = q3 - q1
-            lower = q1 - 1.5 * iqr
-            upper = q3 + 1.5 * iqr
-
-            fn = 0; fsum = 0; fsumsq = 0
-            for (i = 1; i <= n; i++) {
-                if (a[i] >= lower && a[i] <= upper) {
-                    fn++
-                    fa[fn] = a[i]
-                    fsum += a[i]
-                    fsumsq += a[i] * a[i]
-                }
-            }
-
-            if (fn == 0) { printf "0,0,0,0,0,0,0\n"; exit }
-
-            avg = fsum / fn
-            variance = (fsumsq / fn) - (avg * avg)
-            stddev = sqrt(variance > 0 ? variance : 0)
-            p50_idx = int(fn * 0.50); if (p50_idx < 1) p50_idx = 1
-            p99_idx = int(fn * 0.99); if (p99_idx < 1) p99_idx = 1
-
-            printf "%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f\n", avg/1000, fa[p50_idx]/1000, fa[p99_idx]/1000, fa[1]/1000, fa[fn]/1000, fn, stddev/1000
-        }' "${sorted}"
-    else
-        awk '
-        {
-            a[NR] = $1
-            sum += $1
-            sumsq += ($1 * $1)
-        }
-        END {
-            n = NR
-            avg = sum / n
-            variance = (sumsq / n) - (avg * avg)
-            stddev = sqrt(variance > 0 ? variance : 0)
-
-            p50_idx = int(n * 0.50); if (p50_idx < 1) p50_idx = 1
-            p99_idx = int(n * 0.99); if (p99_idx < 1) p99_idx = 1
-
-            printf "%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f\n", avg/1000, a[p50_idx]/1000, a[p99_idx]/1000, a[1]/1000, a[n]/1000, n, stddev/1000
-        }' "${sorted}"
-    fi
+    awk '
+    /^Complete requests:/ { total_reqs = $3 }
+    /^Failed requests:/   { failed = $3 }
+    /^Requests per second:/ { rps = $4 }
+    /^Time per request:/ && !mean_set {
+        mean_ms = $4
+        mean_set = 1
+    }
+    /^Transfer rate:/ { transfer_kbps = $3 }
+    /^ *50%/ { p50 = $2 }
+    /^ *90%/ { p90 = $2 }
+    /^ *95%/ { p95 = $2 }
+    /^ *99%/ { p99 = $2 }
+    /^ *100%/ { max = $2 }
+    END {
+        printf "%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%d,%.2f\n",
+            total_reqs+0, rps+0, mean_ms*1000,
+            p50*1000, p90*1000, p95*1000, p99*1000, max*1000,
+            failed+0, transfer_kbps+0
+    }
+    ' "${file}"
 }
 
 # ── cross-trial 통계 계산 ────────────────────────────────────────────
 compute_cross_trial_stats() {
-    local summary_csv="$1" stats_csv="$2" filter="$3"
+    local summary_csv="$1" stats_csv="$2"
 
-    echo "label,rule_count,trials,filter,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_mean_us,std_mean_us,avg_count,std_count" > "${stats_csv}"
+    echo "label,rule_count,trials,avg_rps,std_rps,avg_mean_us,std_mean_us,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_max_us,std_max_us" > "${stats_csv}"
 
     for rc in ${RULE_COUNTS}; do
-        grep "^${LABEL},${rc},[0-9]*,${filter}," "${summary_csv}" 2>/dev/null | awk -F',' \
-            -v label="${LABEL}" -v rc="${rc}" -v filter="${filter}" '
+        grep "^${LABEL},${rc}," "${summary_csv}" 2>/dev/null | awk -F',' \
+            -v label="${LABEL}" -v rc="${rc}" '
         {
             n++
-            sp50  += $6;  sq50  += $6*$6
-            sp99  += $7;  sq99  += $7*$7
-            smean += $5;  sqmean += $5*$5
-            scnt  += $10; sqcnt += $10*$10
+            srps  += $5;  sqrps  += $5*$5
+            smean += $6;  sqmean += $6*$6
+            sp50  += $7;  sqp50  += $7*$7
+            sp99  += $10; sqp99  += $10*$10
+            smax  += $11; sqmax  += $11*$11
         }
         END {
             if (n == 0) exit
-            ap50 = sp50/n;  ap99  = sp99/n
-            amean = smean/n; acnt = scnt/n
-            v50   = sq50/n  - ap50*ap50;   sd50   = sqrt(v50   > 0 ? v50   : 0)
-            v99   = sq99/n  - ap99*ap99;   sd99   = sqrt(v99   > 0 ? v99   : 0)
-            vmean = sqmean/n - amean*amean; sdmean = sqrt(vmean > 0 ? vmean : 0)
-            vcnt  = sqcnt/n - acnt*acnt;    sdcnt  = sqrt(vcnt  > 0 ? vcnt  : 0)
-            printf "%s,%s,%d,%s,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f\n",
-                label, rc, n, filter,
-                ap50, sd50, ap99, sd99,
-                amean, sdmean, acnt, sdcnt
+            arps  = srps/n;  amean = smean/n
+            ap50  = sp50/n;  ap99  = sp99/n;  amax = smax/n
+
+            vrps  = sqrps/n  - arps*arps;   sdrps  = sqrt(vrps  > 0 ? vrps  : 0)
+            vmean = sqmean/n - amean*amean;  sdmean = sqrt(vmean > 0 ? vmean : 0)
+            vp50  = sqp50/n  - ap50*ap50;    sdp50  = sqrt(vp50  > 0 ? vp50  : 0)
+            vp99  = sqp99/n  - ap99*ap99;    sdp99  = sqrt(vp99  > 0 ? vp99  : 0)
+            vmax  = sqmax/n  - amax*amax;    sdmax  = sqrt(vmax  > 0 ? vmax  : 0)
+
+            printf "%s,%s,%d,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f\n",
+                label, rc, n,
+                arps, sdrps, amean, sdmean,
+                ap50, sdp50, ap99, sdp99,
+                amax, sdmax
         }' >> "${stats_csv}" || true
     done
-}
-
-# ── deploy ───────────────────────────────────────────────────────────
-do_deploy() {
-    log "배포 시작"
-    kubectl apply -f "${SCRIPT_DIR}/00-namespace.yaml"
-    kubectl apply -f "${SCRIPT_DIR}/01-bpftrace-daemonset.yaml"
-
-    log "DaemonSet 대기..."
-    kubectl -n "${NS}" rollout status daemonset/bpftrace-tracer --timeout=120s
-    log "workload Pod 대기..."
-    kubectl -n "${NS}" wait --for=condition=Ready pod/workload --timeout=120s
-
-    TRACER_POD=$(get_tracer_pod)
-    log "bpftrace 설치 (${TRACER_POD})"
-    tracer_exec 'apt-get update -qq && apt-get install -y -qq bpftrace >/dev/null 2>&1 && bpftrace --version'
-
-    log "서버: localhost (127.0.0.1) — 네트워크 RTT 제거, 커널 오버헤드만 측정"
-
-    # 규칙 파일 생성
-    log "규칙 세트 생성 (${LABEL})"
-    mkdir -p "${RESULT_HOST}/rules"
-    for count in ${RULE_COUNTS}; do
-        case "${LABEL}" in
-            kloudknox)
-                python3 "${SCRIPT_DIR}/policies/generate_kloudknox_policies.py" \
-                    --count "${count}" \
-                    --namespace "${NS}" \
-                    --output "${RESULT_HOST}/rules/kloudknox_${count}.yaml"
-                ;;
-            falco)
-                python3 "${SCRIPT_DIR}/policies/generate_falco_rules.py" \
-                    --count "${count}" \
-                    --output "${RESULT_HOST}/rules/falco_${count}.yaml"
-                ;;
-            tetragon)
-                python3 "${SCRIPT_DIR}/policies/generate_tetragon_policies.py" \
-                    --count "${count}" \
-                    --output "${RESULT_HOST}/rules/tetragon_${count}.yaml"
-                ;;
-            *)
-                python3 "${SCRIPT_DIR}/generate_rules.py" \
-                    --count "${count}" --type mixed \
-                    --output "${RESULT_HOST}/rules/rules_${count}.json"
-                ;;
-        esac
-    done
-
-    log "Pod 배치 확인:"
-    kubectl -n "${NS}" get pods -o wide
-
-    # 바이너리 확인
-    work_exec 'ls -la /tools/bin/lat_connect' || { warn "lat_connect 바이너리 없음"; return 1; }
-    work_exec 'ls -la /tools/bin/bw_tcp' || { warn "bw_tcp 바이너리 없음"; return 1; }
-    log "deploy 완료"
 }
 
 # ── trial 간 캐시 초기화 ─────────────────────────────────────────────
@@ -289,15 +197,15 @@ verify_policy() {
                     --field-selector=status.phase=Running \
                     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
                 if [[ -n "${tpod}" ]]; then
-                    # 적용한 정책 수 (load_rules에서 넘긴 count)
+                    # bench-scale 정책만 카운트
                     local expect="${1:-0}"
                     for _i in $(seq 1 180); do
                         local loaded
                         loaded=$(kubectl -n kube-system exec "${tpod}" -c tetragon -- \
-                            tetra tracingpolicy list 2>/dev/null | grep -c "enabled" || true)
+                            tetra tracingpolicy list 2>/dev/null | grep -c "bench-scale" || true)
                         loaded=${loaded:-0}
                         if [[ "${loaded}" -ge "${expect}" ]]; then
-                            log "    Tetragon 센서 ${loaded}개 로드 완료"
+                            log "    Tetragon bench-scale 센서 ${loaded}/${expect}개 로드 완료"
                             break
                         fi
                         [[ $(( _i % 10 )) -eq 0 ]] && log "    센서 로드 중 (${loaded}/${expect})..."
@@ -384,144 +292,205 @@ unload_rules() {
     esac
 }
 
-# ── 단일 측정 ────────────────────────────────────────────────────────
-measure_one() {
+# ── 에이전트 리소스 모니터링 ───────────────────────────────────────────
+start_monitor() {
     local rule_count="$1" trial="$2"
-    local trace_file="/results/${LABEL}_rules${rule_count}_trial${trial}.log"
+    [[ -z "${AGENT_NAME}" ]] && return 0  # vanilla → 스킵
 
-    # 1) bpftrace 시작 ("Attaching" 메시지로 attach 완료 확인)
+    local csv="/results/${LABEL}_resource_rules${rule_count}_trial${trial}.csv"
+    log "    모니터링 시작 (agent=${AGENT_NAME}, interval=${MONITOR_INTERVAL}s, rules=${rule_count}, trial=${trial})"
     tracer_exec "
-cat > /tmp/run_bt.sh << 'BTEOF'
-#!/bin/bash
-nohup bpftrace /scripts/trace_connect.bt > ${trace_file} 2>&1 &
-echo \$! > /tmp/bpf_pid
-for _i in \$(seq 1 30); do
-    if grep -q 'Attaching' ${trace_file} 2>/dev/null; then
-        break
-    fi
-    sleep 1
-done
-if ! grep -q 'Attaching' ${trace_file} 2>/dev/null; then
-    echo 'WARN: bpftrace attach not detected after 30s' >&2
-fi
-BTEOF
-bash /tmp/run_bt.sh
-"
+nohup bash /scripts/monitor_agent.sh '${AGENT_NAME}' '${MONITOR_INTERVAL}' '${rule_count}' '${csv}' >/dev/null 2>&1 &
+echo \$! > /tmp/mon_pid
+" || warn "    모니터링 시작 실패"
+}
 
-    # 2) lat_connect → 서버 Pod IP (cross-node)
-    log "  [rules=${rule_count}, trial ${trial}/${TRIALS}] lat_connect ${SERVER_IP} x${LMBENCH_REPS}"
-    for i in $(seq 1 "${LMBENCH_REPS}"); do
-        work_exec "${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP} 2>/dev/null" || true
-    done
+stop_monitor() {
+    local rule_count="$1" trial="$2"
+    [[ -z "${AGENT_NAME}" ]] && return 0
 
-    # 3) bpftrace 종료
-    sleep 1
+    local csv="/results/${LABEL}_resource_rules${rule_count}_trial${trial}.csv"
+    local local_csv="${RESULT_HOST}/${LABEL}_resource_rules${rule_count}_trial${trial}.csv"
+
+    log "    모니터링 중지 (rules=${rule_count}, trial=${trial})"
     tracer_exec '
-BPF_PID=$(cat /tmp/bpf_pid 2>/dev/null)
-if [ -n "${BPF_PID}" ] && kill -0 ${BPF_PID} 2>/dev/null; then
-    kill -INT ${BPF_PID} 2>/dev/null || true
+MON_PID=$(cat /tmp/mon_pid 2>/dev/null)
+if [ -n "${MON_PID}" ] && kill -0 ${MON_PID} 2>/dev/null; then
+    kill -TERM ${MON_PID} 2>/dev/null || true
     sleep 2
 fi
 ' || true
+
+    # CSV 호스트로 복사
+    kubectl cp "${NS}/${TRACER_POD}:${csv}" "${local_csv}" 2>/dev/null || \
+        tracer_exec "cat ${csv}" > "${local_csv}" 2>/dev/null || true
+
+    if [[ -f "${local_csv}" && -s "${local_csv}" ]]; then
+        local samples
+        samples=$(( $(wc -l < "${local_csv}") - 1 ))
+        log "      리소스 샘플 ${samples}개 수집"
+    else
+        warn "      리소스 데이터 없음"
+    fi
 }
 
-# ── 공통 setup ───────────────────────────────────────────────────────
+compute_resource_summary() {
+    [[ -z "${AGENT_NAME}" ]] && return 0
+
+    local out="${RESULT_HOST}/${LABEL}_resource.csv"
+    echo "label,rule_count,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,samples" > "${out}"
+
+    for rc in ${RULE_COUNTS}; do
+        # 모든 trial의 raw CSV를 합산
+        local merged=""
+        for t in $(seq 1 "${TRIALS}"); do
+            local raw="${RESULT_HOST}/${LABEL}_resource_rules${rc}_trial${t}.csv"
+            [[ -f "${raw}" && -s "${raw}" ]] && merged="${merged} ${raw}"
+        done
+        [[ -z "${merged}" ]] && continue
+
+        awk -F',' -v label="${LABEL}" -v rc="${rc}" '
+        FNR > 1 && NF >= 4 {
+            n++
+            sc += $3; sqc += $3*$3
+            sm += $4; sqm += $4*$4
+        }
+        END {
+            if (n == 0) exit
+            ac = sc/n; am = sm/n
+            vc = sqc/n - ac*ac; sdc = sqrt(vc > 0 ? vc : 0)
+            vm = sqm/n - am*am; sdm = sqrt(vm > 0 ? vm : 0)
+            printf "%s,%s,%.2f,%.2f,%.1f,%.1f,%d\n", label, rc, ac, sdc, am, sdm, n
+        }' ${merged} >> "${out}" || true
+    done
+
+    log "===== 에이전트 리소스 요약 ====="
+    column -t -s',' "${out}" 2>/dev/null || cat "${out}"
+}
+
+# ── deploy ───────────────────────────────────────────────────────────
+do_deploy() {
+    log "배포 시작"
+    kubectl apply -f "${SCRIPT_DIR}/00-namespace.yaml"
+    kubectl apply -f "${SCRIPT_DIR}/01-bpftrace-daemonset.yaml"
+    kubectl apply -f "${SCRIPT_DIR}/nginx-configmap.yaml"
+    kubectl apply -f "${SCRIPT_DIR}/02-nginx-deployment.yaml"
+    kubectl apply -f "${SCRIPT_DIR}/03-ab-client-pod.yaml"
+
+    log "DaemonSet 대기..."
+    kubectl -n "${NS}" rollout status daemonset/bpftrace-tracer --timeout=120s
+    log "Nginx 대기..."
+    kubectl -n "${NS}" rollout status deployment/nginx --timeout=120s
+    log "ab-client Pod 대기..."
+    kubectl -n "${NS}" wait --for=condition=Ready pod/${AB_POD} --timeout=120s
+
+    TRACER_POD=$(get_tracer_pod)
+    log "모니터링 도구 설치 (${TRACER_POD})"
+    tracer_exec 'apt-get update -qq && apt-get install -y -qq procps >/dev/null 2>&1'
+
+    log "ab 설치 확인..."
+    if ! ab_exec 'which ab' &>/dev/null; then
+        log "ab 설치 중 (apache2-utils)..."
+        ab_exec 'apt-get update -qq && apt-get install -y -qq apache2-utils > /dev/null 2>&1'
+    fi
+    ab_exec 'ab -V | head -1'
+
+    # 규칙 파일 생성
+    log "규칙 세트 생성 (${LABEL})"
+    mkdir -p "${RESULT_HOST}/rules"
+    for count in ${RULE_COUNTS}; do
+        case "${LABEL}" in
+            kloudknox)
+                python3 "${SCRIPT_DIR}/policies/generate_kloudknox_policies.py" \
+                    --count "${count}" \
+                    --namespace "${NS}" \
+                    --output "${RESULT_HOST}/rules/kloudknox_${count}.yaml"
+                ;;
+            falco)
+                python3 "${SCRIPT_DIR}/policies/generate_falco_rules.py" \
+                    --count "${count}" \
+                    --output "${RESULT_HOST}/rules/falco_${count}.yaml"
+                ;;
+            tetragon)
+                python3 "${SCRIPT_DIR}/policies/generate_tetragon_policies.py" \
+                    --count "${count}" \
+                    --output "${RESULT_HOST}/rules/tetragon_${count}.yaml"
+                ;;
+        esac
+    done
+
+    log "Pod 배치 확인:"
+    kubectl -n "${NS}" get pods -o wide
+    log "deploy 완료"
+}
+
+# ── 공통 setup (deploy + 연결확인 + 워밍업) ─────────────────────────
 do_setup() {
     do_deploy
     TRACER_POD=$(get_tracer_pod)
     mkdir -p "${RESULT_HOST}"
 
-    setup_cpu_pin
     tracer_exec "{ uname -a; lscpu | head -20; free -h; } > /results/${LABEL}_sysinfo.txt"
 
-    log "TCP 서버 시작 (bw_tcp -s on localhost)"
-    work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
-    work_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
-    sleep 2
-
-    log "서버 연결 확인 (${SERVER_IP})..."
+    log "서버 연결 확인..."
     local connected=false
     for i in $(seq 1 30); do
-        if work_exec "${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP} 2>/dev/null" &>/dev/null; then
+        if ab_exec "ab -n 1 -c 1 ${SERVER_URL}" &>/dev/null; then
             connected=true; break
         fi
         sleep 1
     done
     if [[ "${connected}" != "true" ]]; then
-        warn "서버 연결 실패 (${SERVER_IP}, 30초 타임아웃)"; return 1
+        warn "서버 연결 실패 (30초 타임아웃)"; return 1
     fi
-    log "서버 연결 확인 완료 (localhost)"
+    log "서버 연결 확인 완료"
 
-    log "===== Warm-up (${WARMUP_SEC}초) ====="
-    work_exec "
-timeout ${WARMUP_SEC} bash -c '
-while true; do
-    ${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP} >/dev/null 2>&1
-done
-' || true
-echo 'warm-up done'
-"
+    log "===== Warm-up (${WARMUP_REQUESTS} requests, c=${CONCURRENCY}) ====="
+    ab_exec "ab -n ${WARMUP_REQUESTS} -c ${CONCURRENCY} ${SERVER_URL} > /dev/null 2>&1" || true
     log "Warm-up 완료"
+    sleep 3
     flush_caches
 }
 
-# ── 처리량 cross-trial 통계 ──────────────────────────────────────────
-compute_throughput_cross_trial_stats() {
-    local summary_csv="$1" stats_csv="$2"
-
-    echo "label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_latency_us,std_latency_us" > "${stats_csv}"
-
-    for rc in ${RULE_COUNTS}; do
-        grep "^${LABEL},${rc},[0-9]*," "${summary_csv}" 2>/dev/null | awk -F',' \
-            -v label="${LABEL}" -v rc="${rc}" '
-        {
-            n++
-            sops += $4; sqops += $4*$4
-            slat += $5; sqlat += $5*$5
-        }
-        END {
-            if (n == 0) exit
-            aops = sops/n; alat = slat/n
-            vops = sqops/n - aops*aops; sdops = sqrt(vops > 0 ? vops : 0)
-            vlat = sqlat/n - alat*alat; sdlat = sqrt(vlat > 0 ? vlat : 0)
-            printf "%s,%s,%d,%.1f,%.1f,%.2f,%.2f\n", label, rc, n, aops, sdops, alat, sdlat
-        }' >> "${stats_csv}" || true
-    done
-}
-
-# ── latency (bpftrace로 connect ns 지연 측정, 규칙 수별) ──────────────
-do_latency() {
+# ── run (ab 측정, 규칙 수별) ─────────────────────────────────────────
+do_run() {
     do_setup
 
-    local summary="${RESULT_HOST}/${LABEL}_latency.csv"
-    echo "label,rule_count,trial,filter,avg_us,p50_us,p99_us,min_us,max_us,count,stddev_us" > "${summary}"
+    local summary="${RESULT_HOST}/${LABEL}_ab_summary.csv"
+    echo "label,rule_count,trial,total_reqs,rps,mean_us,p50_us,p90_us,p95_us,p99_us,max_us,failed,transfer_kbps" > "${summary}"
 
     for rule_count in ${RULE_COUNTS}; do
-        log "===== [Latency] 규칙 수: ${rule_count} ====="
+        log "===== 규칙 수: ${rule_count} (c=${CONCURRENCY}, n=${TOTAL_REQUESTS}) ====="
         [[ "${LABEL}" != "vanilla" ]] && load_rules "${rule_count}"
 
         for trial in $(seq 1 "${TRIALS}"); do
-            measure_one "${rule_count}" "${trial}"
+            local tag="ab_rules${rule_count}_trial${trial}"
+            local remote="/results/${LABEL}_${tag}.txt"
+            local local_f="${RESULT_HOST}/${LABEL}_${tag}.txt"
 
-            local remote="/results/${LABEL}_rules${rule_count}_trial${trial}.log"
-            local local_f="${RESULT_HOST}/${LABEL}_rules${rule_count}_trial${trial}.log"
-            kubectl cp "${NS}/${TRACER_POD}:${remote}" "${local_f}" 2>/dev/null || \
-                tracer_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
+            start_monitor "${rule_count}" "${trial}"
+
+            log "  [rules=${rule_count}, trial ${trial}/${TRIALS}] ab -n ${TOTAL_REQUESTS} -c ${CONCURRENCY}"
+            ab_exec "ab -n ${TOTAL_REQUESTS} -c ${CONCURRENCY} ${SERVER_URL} > ${remote} 2>&1" || true
+
+            stop_monitor "${rule_count}" "${trial}"
+
+            # 결과 복사 + 파싱
+            kubectl cp "${NS}/${AB_POD}:${remote}" "${local_f}" 2>/dev/null || \
+                ab_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
 
             if [[ -f "${local_f}" && -s "${local_f}" ]]; then
-                local raw_stats iqr_stats
-                raw_stats=$(compute_stats "${local_f}" "raw")
-                iqr_stats=$(compute_stats "${local_f}" "iqr")
-                echo "${LABEL},${rule_count},${trial},raw,${raw_stats}" >> "${summary}"
-                echo "${LABEL},${rule_count},${trial},iqr,${iqr_stats}" >> "${summary}"
+                local stats
+                stats=$(parse_ab_result "${local_f}")
+                echo "${LABEL},${rule_count},${trial},${stats}" >> "${summary}"
 
-                local i_avg i_p50 i_p99 i_cnt i_sd
-                i_avg=$(echo "${iqr_stats}" | cut -d, -f1)
-                i_p50=$(echo "${iqr_stats}" | cut -d, -f2)
-                i_p99=$(echo "${iqr_stats}" | cut -d, -f3)
-                i_cnt=$(echo "${iqr_stats}" | cut -d, -f6)
-                i_sd=$(echo "${iqr_stats}"  | cut -d, -f7)
-                log "    rules=${rule_count} trial=${trial}: avg=${i_avg}±${i_sd}μs  p50=${i_p50}μs  p99=${i_p99}μs  (n=${i_cnt})"
+                local rps_d mean_d p50_d p99_d failed_d
+                rps_d=$(echo "${stats}" | cut -d, -f2)
+                mean_d=$(echo "${stats}" | cut -d, -f3)
+                p50_d=$(echo "${stats}" | cut -d, -f4)
+                p99_d=$(echo "${stats}" | cut -d, -f7)
+                failed_d=$(echo "${stats}" | cut -d, -f9)
+                log "    RPS=${rps_d}  mean=${mean_d}μs  p50=${p50_d}μs  p99=${p99_d}μs  failed=${failed_d}"
             else
                 warn "    결과 없음"
             fi
@@ -533,87 +502,20 @@ do_latency() {
         flush_caches
     done
 
-    work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
+    compute_resource_summary
 
-    log "===== Latency Cross-trial 통계 ====="
-    local stats_iqr="${RESULT_HOST}/${LABEL}_latency_stats_iqr.csv"
-    local stats_raw="${RESULT_HOST}/${LABEL}_latency_stats_raw.csv"
-    compute_cross_trial_stats "${summary}" "${stats_iqr}" "iqr"
-    compute_cross_trial_stats "${summary}" "${stats_raw}" "raw"
+    log "===== Cross-trial 통계 ====="
+    local stats_csv="${RESULT_HOST}/${LABEL}_ab_stats.csv"
+    compute_cross_trial_stats "${summary}" "${stats_csv}"
 
     echo ""
     log "Per-trial:"
     column -t -s',' "${summary}" 2>/dev/null || cat "${summary}"
     echo ""
-    log "Cross-trial (IQR, avg ± stddev):"
-    column -t -s',' "${stats_iqr}" 2>/dev/null || cat "${stats_iqr}"
-    echo ""
-    log "완료 (mode=latency, label=${LABEL}, trials=${TRIALS}, reps=${LMBENCH_REPS}, rules=[${RULE_COUNTS}])"
-}
-
-# ── throughput (규칙 수별 connect ops/sec 측정) ───────────────────────
-# lat_connect -N 으로 내부 반복, 출력된 μs 값에서 ops/sec = 1000000/μs 계산
-do_throughput() {
-    do_setup
-
-    local summary="${RESULT_HOST}/${LABEL}_throughput.csv"
-    echo "label,rule_count,trial,ops_sec,latency_us,N" > "${summary}"
-
-    for rule_count in ${RULE_COUNTS}; do
-        log "===== [Throughput] 규칙 수: ${rule_count} ====="
-
-        # bw_tcp 서버 재시작 (대량 연결 후 크래시 방지)
-        work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
-        sleep 1
-        work_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
-        sleep 1
-
-        # bw_tcp 재시작 후 워밍업 (Trial 1 아웃라이어 방지)
-        work_exec "${PIN_CMD} /tools/bin/lat_connect -N 200 ${SERVER_IP} >/dev/null 2>&1" || true
-        sleep 1
-
-        [[ "${LABEL}" != "vanilla" ]] && load_rules "${rule_count}"
-
-        for trial in $(seq 1 "${TRIALS}"); do
-            log "  rules=${rule_count} trial=${trial}: lat_connect -N ${TPUT_N}"
-
-            local result
-            result=$(work_exec "${PIN_CMD} /tools/bin/lat_connect -N ${TPUT_N} ${SERVER_IP} 2>&1")
-
-            # "TCP/IP connection cost to X.X.X.X: 123.4567 microseconds" 파싱
-            local latency_us ops_sec
-            latency_us=$(echo "${result}" | grep -oP '[\d.]+(?= microseconds)' | head -1)
-
-            if [[ -n "${latency_us}" ]]; then
-                ops_sec=$(awk "BEGIN {printf \"%.1f\", 1000000 / ${latency_us}}")
-                echo "${LABEL},${rule_count},${trial},${ops_sec},${latency_us},${TPUT_N}" >> "${summary}"
-                log "    latency=${latency_us}μs  ops/sec=${ops_sec}  (N=${TPUT_N})"
-            else
-                warn "    측정 실패: ${result}"
-                echo "${LABEL},${rule_count},${trial},0,0,${TPUT_N}" >> "${summary}"
-            fi
-
-            [[ ${trial} -lt ${TRIALS} ]] && sleep "${COOLDOWN}"
-        done
-
-        [[ "${LABEL}" != "vanilla" ]] && unload_rules "${rule_count}"
-        flush_caches
-    done
-
-    work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
-
-    log "===== Throughput Cross-trial 통계 ====="
-    local stats_csv="${RESULT_HOST}/${LABEL}_throughput_stats.csv"
-    compute_throughput_cross_trial_stats "${summary}" "${stats_csv}"
-
-    echo ""
-    log "Per-trial:"
-    column -t -s',' "${summary}" 2>/dev/null || cat "${summary}"
-    echo ""
-    log "Cross-trial (avg ± stddev):"
+    log "Cross-trial (avg +/- stddev):"
     column -t -s',' "${stats_csv}" 2>/dev/null || cat "${stats_csv}"
     echo ""
-    log "완료 (mode=throughput, label=${LABEL}, trials=${TRIALS}, N=${TPUT_N}, rules=[${RULE_COUNTS}])"
+    log "완료 (label=${LABEL}, trials=${TRIALS}, reqs=${TOTAL_REQUESTS}, c=${CONCURRENCY}, rules=[${RULE_COUNTS}])"
 }
 
 # ── cleanup ──────────────────────────────────────────────────────────
@@ -631,24 +533,22 @@ do_cleanup() {
 }
 
 case "${1:-help}" in
-    latency)    do_latency ;;
-    throughput) do_throughput ;;
+    run)        do_run ;;
     deploy)     do_deploy ;;
     cleanup)    do_cleanup ;;
     *)
         echo "사용법:"
-        echo "  bash $0 latency    [vanilla|kloudknox|falco|tetragon]  # 지연시간 측정 (bpftrace)"
-        echo "  bash $0 throughput [vanilla|kloudknox|falco|tetragon]  # 처리량(ops/sec) 측정"
-        echo "  bash $0 deploy                                         # 인프라만 배포"
-        echo "  bash $0 cleanup                                        # 전체 정리"
+        echo "  bash $0 run     [vanilla|kloudknox|falco|tetragon]  # 벤치마크 실행"
+        echo "  bash $0 deploy                                       # 인프라 배포"
+        echo "  bash $0 cleanup                                      # 전체 정리"
         echo ""
         echo "환경변수:"
         echo "  TRIALS=3              반복 횟수 (기본 3)"
-        echo "  WARMUP_SEC=30         워밍업 시간 (기본 30초)"
-        echo "  LMBENCH_REPS=10       trial당 lmbench 반복 (기본 10회)"
-        echo "  PIN_CORE=2            CPU pinning 코어 (기본 2)"
-        echo "  COOLDOWN=5            trial 간 쿨다운 (기본 5초)"
-        echo "  TPUT_DURATION=10      처리량 측정 시간 (기본 10초)"
-        echo "  RULE_COUNTS='10 50 100 500 1000 5000'  규칙 수 리스트"
+        echo "  TOTAL_REQUESTS=10000  ab 총 요청 수 (기본 10000)"
+        echo "  CONCURRENCY=100       ab 동시 연결 수 (기본 100)"
+        echo "  COOLDOWN=5            trial 간 쿨다운 초 (기본 5)"
+        echo "  WARMUP_REQUESTS=1000  워밍업 요청 수 (기본 1000)"
+        echo "  MONITOR_INTERVAL=2    에이전트 리소스 샘플링 간격 (기본 2초)"
+        echo "  RULE_COUNTS='10 50 100 250'  규칙 수 리스트"
         ;;
 esac

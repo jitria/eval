@@ -1,0 +1,122 @@
+###############################################################################
+# Falco Rules — 5.6-iperf
+#
+# 컨테이너 대상으로 주요 syscall/이벤트를 감시하여 오버헤드 측정.
+# 5.6 Nginx ab와 동일한 syscall 범위로 공정한 비교.
+#
+# 적용:
+#   helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+#       --set-file "customRules.bench-rules\.yaml=falco-rules.yaml"
+###############################################################################
+
+- rule: Bench Process Exec Audit
+  desc: Audit process executions in containers
+  condition: >
+    evt.type in (execve, execveat)
+    and container.id != host
+  output: >
+    Process executed
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     parent=%proc.pname container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]
+
+- rule: Bench Process Exit Audit
+  desc: Audit process exits in containers
+  condition: >
+    evt.type in (exit, exit_group)
+    and container.id != host
+  output: >
+    Process exited
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]
+
+- rule: Bench File Open Audit
+  desc: Audit file open operations in containers
+  condition: >
+    evt.type in (open, openat, openat2)
+    and container.id != host
+  output: >
+    File opened
+    (user=%user.name file=%fd.name dir=%fd.directory exe=%proc.exepath
+     command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]
+
+- rule: Bench File Close Audit
+  desc: Audit file close operations in containers
+  condition: >
+    evt.type = close
+    and container.id != host
+  output: >
+    File closed
+    (user=%user.name exe=%proc.exepath container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]
+
+- rule: Bench Net Connect Audit
+  desc: Audit outbound network connections in containers
+  condition: >
+    evt.type = connect
+    and container.id != host
+    and fd.type = ipv4
+  output: >
+    Network connect
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     dest=%fd.sip:%fd.sport container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]
+
+- rule: Bench Net Bind Audit
+  desc: Audit socket bind operations in containers
+  condition: >
+    evt.type = bind
+    and container.id != host
+  output: >
+    Socket bind
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]
+
+- rule: Bench Net Accept Audit
+  desc: Audit socket accept operations in containers
+  condition: >
+    evt.type in (accept, accept4)
+    and container.id != host
+  output: >
+    Socket accept
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]
+
+- rule: Bench UDP Send Audit
+  desc: Audit UDP send operations in containers
+  condition: >
+    evt.type in (sendto, sendmsg)
+    and container.id != host
+  output: >
+    UDP send
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]
+
+- rule: Bench UDP Recv Audit
+  desc: Audit UDP receive operations in containers
+  condition: >
+    evt.type in (recvfrom, recvmsg)
+    and container.id != host
+  output: >
+    UDP recv
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, iperf]

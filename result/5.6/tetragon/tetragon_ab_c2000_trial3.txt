@@ -1,0 +1,54 @@
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking nginx-ab-svc.bench-nginx-ab.svc.cluster.local (be patient)
+Completed 200000 requests
+Completed 400000 requests
+Completed 600000 requests
+Completed 800000 requests
+Completed 1000000 requests
+Completed 1200000 requests
+Completed 1400000 requests
+Completed 1600000 requests
+Completed 1800000 requests
+Completed 2000000 requests
+Finished 2000000 requests
+
+
+Server Software:        nginx/1.25.5
+Server Hostname:        nginx-ab-svc.bench-nginx-ab.svc.cluster.local
+Server Port:            80
+
+Document Path:          /
+Document Length:        3 bytes
+
+Concurrency Level:      2000
+Time taken for tests:   61.256 seconds
+Complete requests:      2000000
+Failed requests:        0
+Keep-Alive requests:    2000000
+Total transferred:      352000000 bytes
+HTML transferred:       6000000 bytes
+Requests per second:    32650.12 [#/sec] (mean)
+Time per request:       61.256 [ms] (mean)
+Time per request:       0.031 [ms] (mean, across all concurrent requests)
+Transfer rate:          5611.74 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   3.5      0     163
+Processing:       0   61  38.5     58     759
+Waiting:          0   61  38.5     58     759
+Total:            0   61  38.7     58     759
+
+Percentage of the requests served within a certain time (ms)
+  50%     58
+  66%     68
+  75%     73
+  80%     77
+  90%     86
+  95%     94
+  98%    131
+  99%    294
+ 100%    759 (longest request)

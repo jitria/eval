@@ -1,0 +1,5 @@
+label,rule_count,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,samples
+kloudknox,10,77.93,51.92,155.0,8.1,91
+kloudknox,50,108.08,11.86,151.0,0.0,65
+kloudknox,100,105.18,12.77,151.8,0.8,67
+kloudknox,250,111.64,9.97,164.2,1.1,60

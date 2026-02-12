@@ -1,0 +1,5 @@
+label,rule_count,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,samples
+tetragon,10,1.94,1.99,131.4,15.1,80
+tetragon,50,1.90,2.34,144.1,43.5,223
+tetragon,100,2.18,3.94,118.3,6.2,407
+tetragon,250,1.98,3.00,148.3,25.8,986

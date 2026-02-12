@@ -1,18 +1,12 @@
 ###############################################################################
-# 5.7 — ConfigMap + DaemonSet + workload Pod (클라이언트: compute-node-1)
+# 5.7 — ConfigMap + DaemonSet (에이전트 리소스 모니터링용)
 #
 # 아키텍처:
 #   compute-node-1 (클라이언트)
-#     ├── bpftrace DaemonSet — connect syscall 트레이싱
-#     └── workload Pod — lat_connect <서버IP> 실행
+#     ├── bpftrace DaemonSet (privileged, hostPID) — monitor_agent.sh 실행
+#     └── ab-client Pod — ab 실행 (03-ab-client-pod.yaml)
 #   compute-node-2 (서버)
-#     └── tcp-server Pod — bw_tcp -s (02-tcp-server-pod.yaml)
-#
-# 수정 사항 (v1 → v2):
-#   1) comm 필터: "lat_connect"만 캡처 (시스템 노이즈 제거)
-#   2) printf로 개별 delta(ns) 출력 → p50/p99 오프라인 계산
-#   3) hist()는 시각화용으로 유지
-#   4) 클라이언트(compute-node-1) ↔ 서버(compute-node-2) 분리
+#     └── Nginx Deployment (02-nginx-deployment.yaml)
 ###############################################################################
 apiVersion: v1
 kind: ConfigMap
@@ -30,6 +24,115 @@ data:
         @latency = hist($delta);
         delete(@start[tid]);
     }
+  monitor_agent.sh: |
+    #!/usr/bin/env bash
+    ###########################################################################
+    # monitor_agent.sh — 에이전트 CPU/Memory 샘플링 (5.7 Policy Scalability)
+    #
+    # 5.8 monitor_in_pod.sh 로직 재활용 (경량화):
+    #   - 무한 루프 + SIGTERM 종료 (고정 샘플 수 대신)
+    #   - rule_count 기반 (pod_count 대신)
+    #   - 노드 전체 CPU/메모리는 생략 (에이전트 오버헤드에 집중)
+    #
+    # 인자:
+    #   $1 = agent_name    (kloudknox|falco|tetragon)
+    #   $2 = interval       (샘플링 간격 초)
+    #   $3 = rule_count     (현재 규칙 수)
+    #   $4 = output_file    (CSV 출력 경로)
+    #
+    # CSV: timestamp,rule_count,agent_cpu_pct,agent_mem_mb
+    ###########################################################################
+    set -euo pipefail
+
+    AGENT_NAME="${1:-}"
+    INTERVAL="${2:-2}"
+    RULE_COUNT="${3:-0}"
+    OUTPUT="${4:-/results/monitor.csv}"
+
+    echo "timestamp,rule_count,agent_cpu_pct,agent_mem_mb" > "${OUTPUT}"
+
+    # ── 에이전트 PID 탐색 (3단계 폴백) ──────────────────────────────
+    AGENT_PID=""
+    if [[ -n "${AGENT_NAME}" ]]; then
+        AGENT_PID=$(pgrep -x "${AGENT_NAME}" 2>/dev/null | head -1 || true)
+        if [[ -z "${AGENT_PID}" ]]; then
+            AGENT_PID=$(pgrep -f "/${AGENT_NAME}" 2>/dev/null | head -1 || true)
+        fi
+        if [[ -z "${AGENT_PID}" ]]; then
+            AGENT_PID=$(pgrep -f "${AGENT_NAME}" 2>/dev/null | head -1 || true)
+        fi
+        if [[ -n "${AGENT_PID}" ]]; then
+            echo "[monitor] agent PID: ${AGENT_PID} (${AGENT_NAME})" >&2
+        else
+            echo "[monitor] agent not found: ${AGENT_NAME}" >&2
+        fi
+    fi
+
+    # ── 헬퍼 함수 ────────────────────────────────────────────────────
+    read_cpu_stat() {
+        awk '/^cpu / {print $2,$3,$4,$5,$6,$7,$8,$9}' /proc/stat
+    }
+
+    read_agent_ticks() {
+        local pid="$1"
+        if [[ -n "$pid" && -f "/proc/$pid/stat" ]]; then
+            awk '{print $14+$15}' "/proc/$pid/stat" 2>/dev/null || echo "0"
+        else
+            echo "0"
+        fi
+    }
+
+    read_agent_mem_mb() {
+        local pid="$1"
+        if [[ -n "$pid" && -f "/proc/$pid/status" ]]; then
+            awk '/^VmRSS:/{printf "%.1f",$2/1024}' "/proc/$pid/status" 2>/dev/null || echo "0"
+        else
+            echo "0"
+        fi
+    }
+
+    NPROC=$(nproc 2>/dev/null || echo 1)
+
+    echo "[monitor] rule_count=${RULE_COUNT}, agent=${AGENT_NAME:-none}, interval=${INTERVAL}s, nproc=${NPROC}" >&2
+
+    # ── SIGTERM 핸들러 ────────────────────────────────────────────────
+    RUNNING=true
+    trap 'RUNNING=false' SIGTERM SIGINT
+
+    # ── 초기 스냅샷 ──────────────────────────────────────────────────
+    prev_stat=$(read_cpu_stat)
+    prev_agent=$(read_agent_ticks "${AGENT_PID}")
+
+    while ${RUNNING}; do
+        sleep "${INTERVAL}" || true
+        ${RUNNING} || break
+
+        ts=$(date +%Y-%m-%dT%H:%M:%S)
+        curr_stat=$(read_cpu_stat)
+        curr_agent=$(read_agent_ticks "${AGENT_PID}")
+
+        # 에이전트 CPU% (per-core 기준, top 방식)
+        agent_cpu="0.00"
+        if [[ -n "${AGENT_PID}" ]]; then
+            agent_cpu=$(echo "${prev_agent}" "${curr_agent}" "${prev_stat}" "${curr_stat}" "${NPROC}" | awk '{
+                da=$2-$1
+                pt=$3+$4+$5+$6+$7+$8+$9+$10
+                ct=$11+$12+$13+$14+$15+$16+$17+$18
+                dt=ct-pt; nproc=$19
+                if(dt>0) printf "%.2f",da/dt*100*nproc; else printf "0.00"
+            }')
+        fi
+
+        # 에이전트 메모리 (VmRSS, KB→MB)
+        agent_mem=$(read_agent_mem_mb "${AGENT_PID}")
+
+        echo "${ts},${RULE_COUNT},${agent_cpu},${agent_mem}" >> "${OUTPUT}"
+
+        prev_stat="${curr_stat}"
+        prev_agent="${curr_agent}"
+    done
+
+    echo "[monitor] stopped → ${OUTPUT}" >&2
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -90,33 +193,3 @@ spec:
         - name: kernel-headers
           hostPath:
             path: /usr/src
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: workload
-  namespace: bench-policy
-  labels:
-    app: workload
-spec:
-  nodeSelector:
-    kubernetes.io/hostname: compute-node-1
-  containers:
-    - name: bench
-      image: ubuntu:22.04
-      command: ["sleep", "infinity"]
-      volumeMounts:
-        - name: tools
-          mountPath: /tools
-          readOnly: true
-        - name: results
-          mountPath: /results
-  volumes:
-    - name: tools
-      hostPath:
-        path: /opt/bench-tools
-        type: DirectoryOrCreate
-    - name: results
-      hostPath:
-        path: /tmp/2026SoCC/bench-5.7
-        type: DirectoryOrCreate

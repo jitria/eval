@@ -1,0 +1,491 @@
+- condition: evt.type = connect and container.id != host and fd.snet = 10.48.0.0/12
+    and fd.sport = 8443
+  desc: Audit connect to 10.48.0.0/12 (rule 1/50)
+  output: Connection to monitored network 10.48.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 1
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.71.52.0/24
+    and fd.sport = 6379
+  desc: Audit connect to 10.71.52.0/24 (rule 2/50)
+  output: Connection to monitored network 10.71.52.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 2
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.16.0.0/12
+    and fd.sport = 8443
+  desc: Audit connect to 10.16.0.0/12 (rule 3/50)
+  output: Connection to monitored network 10.16.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 3
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.0.0.0/12
+  desc: Audit connect to 10.0.0.0/12 (rule 4/50)
+  output: Connection to monitored network 10.0.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 4
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.142.3.80/28
+    and fd.sport = 6379
+  desc: Audit connect to 10.142.3.80/28 (rule 5/50)
+  output: Connection to monitored network 10.142.3.80/28 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 5
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.160.0.0/12
+    and fd.sport = 5432
+  desc: Audit connect to 10.160.0.0/12 (rule 6/50)
+  output: Connection to monitored network 10.160.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 6
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.0.0.0/8
+    and fd.sport = 5432
+  desc: Audit connect to 10.0.0.0/8 (rule 7/50)
+  output: Connection to monitored network 10.0.0.0/8 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 7
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.176.135.16/28
+  desc: Audit connect to 10.176.135.16/28 (rule 8/50)
+  output: Connection to monitored network 10.176.135.16/28 (command=%proc.cmdline
+    dest=%fd.sip:%fd.sport container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 8
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.63.193.0/24
+    and fd.sport = 3306
+  desc: Audit connect to 10.63.193.0/24 (rule 9/50)
+  output: Connection to monitored network 10.63.193.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 9
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.116.148.40/32
+    and fd.sport = 8443
+  desc: Audit connect to 10.116.148.40/32 (rule 10/50)
+  output: Connection to monitored network 10.116.148.40/32 (command=%proc.cmdline
+    dest=%fd.sip:%fd.sport container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 10
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.51.192.0/20
+    and fd.sport = 5432
+  desc: Audit connect to 10.51.192.0/20 (rule 11/50)
+  output: Connection to monitored network 10.51.192.0/20 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 11
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.80.0.0/12
+    and fd.sport = 3306
+  desc: Audit connect to 10.80.0.0/12 (rule 12/50)
+  output: Connection to monitored network 10.80.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 12
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.32.0.0/12
+  desc: Audit connect to 10.32.0.0/12 (rule 13/50)
+  output: Connection to monitored network 10.32.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 13
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.194.138.112/28
+    and fd.sport = 5432
+  desc: Audit connect to 10.194.138.112/28 (rule 14/50)
+  output: Connection to monitored network 10.194.138.112/28 (command=%proc.cmdline
+    dest=%fd.sip:%fd.sport container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 14
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.28.117.16/32
+    and fd.sport = 5432
+  desc: Audit connect to 10.28.117.16/32 (rule 15/50)
+  output: Connection to monitored network 10.28.117.16/32 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 15
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.192.0.0/12
+    and fd.sport = 5432
+  desc: Audit connect to 10.192.0.0/12 (rule 16/50)
+  output: Connection to monitored network 10.192.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 16
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.108.255.192/28
+  desc: Audit connect to 10.108.255.192/28 (rule 17/50)
+  output: Connection to monitored network 10.108.255.192/28 (command=%proc.cmdline
+    dest=%fd.sip:%fd.sport container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 17
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.64.0.0/12
+    and fd.sport = 3306
+  desc: Audit connect to 10.64.0.0/12 (rule 18/50)
+  output: Connection to monitored network 10.64.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 18
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.208.0.0/12
+    and fd.sport = 8080
+  desc: Audit connect to 10.208.0.0/12 (rule 19/50)
+  output: Connection to monitored network 10.208.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 19
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.252.46.24/32
+    and fd.sport = 443
+  desc: Audit connect to 10.252.46.24/32 (rule 20/50)
+  output: Connection to monitored network 10.252.46.24/32 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 20
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.78.81.0/24
+    and fd.sport = 443
+  desc: Audit connect to 10.78.81.0/24 (rule 21/50)
+  output: Connection to monitored network 10.78.81.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 21
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.197.195.0/24
+    and fd.sport = 3306
+  desc: Audit connect to 10.197.195.0/24 (rule 22/50)
+  output: Connection to monitored network 10.197.195.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 22
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.5.58.136/32
+    and fd.sport = 5432
+  desc: Audit connect to 10.5.58.136/32 (rule 23/50)
+  output: Connection to monitored network 10.5.58.136/32 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 23
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.232.1.0/24
+    and fd.sport = 8080
+  desc: Audit connect to 10.232.1.0/24 (rule 24/50)
+  output: Connection to monitored network 10.232.1.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 24
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.191.82.0/24
+    and fd.sport = 5432
+  desc: Audit connect to 10.191.82.0/24 (rule 25/50)
+  output: Connection to monitored network 10.191.82.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 25
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.250.0.0/16
+    and fd.sport = 3306
+  desc: Audit connect to 10.250.0.0/16 (rule 26/50)
+  output: Connection to monitored network 10.250.0.0/16 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 26
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.122.29.0/24
+    and fd.sport = 443
+  desc: Audit connect to 10.122.29.0/24 (rule 27/50)
+  output: Connection to monitored network 10.122.29.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 27
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.43.248.35/32
+    and fd.sport = 8080
+  desc: Audit connect to 10.43.248.35/32 (rule 28/50)
+  output: Connection to monitored network 10.43.248.35/32 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 28
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.65.0.0/16
+    and fd.sport = 6379
+  desc: Audit connect to 10.65.0.0/16 (rule 29/50)
+  output: Connection to monitored network 10.65.0.0/16 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 29
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.108.96.0/20
+    and fd.sport = 5432
+  desc: Audit connect to 10.108.96.0/20 (rule 30/50)
+  output: Connection to monitored network 10.108.96.0/20 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 30
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.224.0.0/12
+    and fd.sport = 8443
+  desc: Audit connect to 10.224.0.0/12 (rule 31/50)
+  output: Connection to monitored network 10.224.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 31
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.32.173.0/24
+    and fd.sport = 8443
+  desc: Audit connect to 10.32.173.0/24 (rule 32/50)
+  output: Connection to monitored network 10.32.173.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 32
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.112.3.32/28
+    and fd.sport = 80
+  desc: Audit connect to 10.112.3.32/28 (rule 33/50)
+  output: Connection to monitored network 10.112.3.32/28 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 33
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.117.34.16/32
+    and fd.sport = 5432
+  desc: Audit connect to 10.117.34.16/32 (rule 34/50)
+  output: Connection to monitored network 10.117.34.16/32 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 34
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.36.121.128/28
+  desc: Audit connect to 10.36.121.128/28 (rule 35/50)
+  output: Connection to monitored network 10.36.121.128/28 (command=%proc.cmdline
+    dest=%fd.sip:%fd.sport container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 35
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.96.0.0/12
+  desc: Audit connect to 10.96.0.0/12 (rule 36/50)
+  output: Connection to monitored network 10.96.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 36
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.220.176.0/20
+  desc: Audit connect to 10.220.176.0/20 (rule 37/50)
+  output: Connection to monitored network 10.220.176.0/20 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 37
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.27.48.0/20
+    and fd.sport = 5432
+  desc: Audit connect to 10.27.48.0/20 (rule 38/50)
+  output: Connection to monitored network 10.27.48.0/20 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 38
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.142.236.127/32
+    and fd.sport = 443
+  desc: Audit connect to 10.142.236.127/32 (rule 39/50)
+  output: Connection to monitored network 10.142.236.127/32 (command=%proc.cmdline
+    dest=%fd.sip:%fd.sport container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 39
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.226.50.16/28
+    and fd.sport = 80
+  desc: Audit connect to 10.226.50.16/28 (rule 40/50)
+  output: Connection to monitored network 10.226.50.16/28 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 40
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.47.112.0/20
+  desc: Audit connect to 10.47.112.0/20 (rule 41/50)
+  output: Connection to monitored network 10.47.112.0/20 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 41
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.84.192.0/20
+    and fd.sport = 3306
+  desc: Audit connect to 10.84.192.0/20 (rule 42/50)
+  output: Connection to monitored network 10.84.192.0/20 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 42
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.232.146.208/28
+  desc: Audit connect to 10.232.146.208/28 (rule 43/50)
+  output: Connection to monitored network 10.232.146.208/28 (command=%proc.cmdline
+    dest=%fd.sip:%fd.sport container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 43
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.41.95.0/24
+    and fd.sport = 443
+  desc: Audit connect to 10.41.95.0/24 (rule 44/50)
+  output: Connection to monitored network 10.41.95.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 44
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.120.206.0/24
+    and fd.sport = 8443
+  desc: Audit connect to 10.120.206.0/24 (rule 45/50)
+  output: Connection to monitored network 10.120.206.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 45
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.20.41.208/28
+    and fd.sport = 5432
+  desc: Audit connect to 10.20.41.208/28 (rule 46/50)
+  output: Connection to monitored network 10.20.41.208/28 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 46
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.128.0.0/12
+    and fd.sport = 3306
+  desc: Audit connect to 10.128.0.0/12 (rule 47/50)
+  output: Connection to monitored network 10.128.0.0/12 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 47
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.202.64.0/20
+    and fd.sport = 5432
+  desc: Audit connect to 10.202.64.0/20 (rule 48/50)
+  output: Connection to monitored network 10.202.64.0/20 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 48
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.37.4.0/24
+    and fd.sport = 443
+  desc: Audit connect to 10.37.4.0/24 (rule 49/50)
+  output: Connection to monitored network 10.37.4.0/24 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 49
+  tags:
+  - bench
+  - policy-scalability
+- condition: evt.type = connect and container.id != host and fd.snet = 10.178.0.0/16
+    and fd.sport = 3306
+  desc: Audit connect to 10.178.0.0/16 (rule 50/50)
+  output: Connection to monitored network 10.178.0.0/16 (command=%proc.cmdline dest=%fd.sip:%fd.sport
+    container=%container.name ns=%k8s.ns.name)
+  priority: NOTICE
+  rule: Bench Network Rule 50
+  tags:
+  - bench
+  - policy-scalability

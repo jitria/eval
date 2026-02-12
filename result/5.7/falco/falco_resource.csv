@@ -1,0 +1,5 @@
+label,rule_count,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,samples
+falco,10,55.38,9.07,646.5,0.5,63
+falco,50,100.70,1.17,646.7,0.6,65
+falco,100,67.43,50.57,451.6,280.6,61
+falco,250,70.46,51.47,470.7,277.9,61

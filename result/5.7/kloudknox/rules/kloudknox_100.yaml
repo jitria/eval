@@ -1,0 +1,1660 @@
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0000
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.48.0.0/12
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0001
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.71.52.0/24
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0002
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.16.0.0/12
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0003
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.0.0.0/12
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0004
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.142.3.80/28
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0005
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.160.0.0/12
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0006
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.0.0.0/8
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0007
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.176.135.16/28
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0008
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.63.193.0/24
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0009
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.116.148.40/32
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0010
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.51.192.0/20
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0011
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.80.0.0/12
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0012
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.32.0.0/12
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0013
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.194.138.112/28
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0014
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.28.117.16/32
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0015
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.192.0.0/12
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0016
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.108.255.192/28
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0017
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.64.0.0/12
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0018
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.208.0.0/12
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0019
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.252.46.24/32
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0020
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.78.81.0/24
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0021
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.197.195.0/24
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0022
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.5.58.136/32
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0023
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.232.1.0/24
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0024
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.191.82.0/24
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0025
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.250.0.0/16
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0026
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.122.29.0/24
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0027
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.43.248.35/32
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0028
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.65.0.0/16
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0029
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.108.96.0/20
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0030
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.224.0.0/12
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0031
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.32.173.0/24
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0032
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.112.3.32/28
+    ports:
+    - port: 80
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0033
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.117.34.16/32
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0034
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.36.121.128/28
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0035
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.96.0.0/12
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0036
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.220.176.0/20
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0037
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.27.48.0/20
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0038
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.142.236.127/32
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0039
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.226.50.16/28
+    ports:
+    - port: 80
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0040
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.47.112.0/20
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0041
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.84.192.0/20
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0042
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.232.146.208/28
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0043
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.41.95.0/24
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0044
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.120.206.0/24
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0045
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.20.41.208/28
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0046
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.128.0.0/12
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0047
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.202.64.0/20
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0048
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.37.4.0/24
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0049
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.178.0.0/16
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0050
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.80.224.0/24
+    ports:
+    - port: 80
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0051
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.153.0.0/16
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0052
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.54.0.0/16
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0053
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.175.104.0/24
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0054
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.128.26.32/28
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0055
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.141.0.0/16
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0056
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.134.82.0/24
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0057
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.4.57.32/28
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0058
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.18.176.0/20
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0059
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.21.157.186/32
+    ports:
+    - port: 80
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0060
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.183.107.112/28
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0061
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.176.0.0/12
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0062
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.170.0.0/16
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0063
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.55.195.19/32
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0064
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.113.0.0/16
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0065
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.116.114.0/28
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0066
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.204.168.142/32
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0067
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.142.179.192/28
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0068
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.135.19.0/24
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0069
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.176.160.0/24
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0070
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.223.0.0/16
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0071
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.35.169.160/28
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0072
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.215.194.0/24
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0073
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.207.0.0/16
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0074
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.220.160.0/20
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0075
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.109.242.80/28
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0076
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.145.171.47/32
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0077
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.144.0.0/12
+    ports:
+    - port: 80
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0078
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.23.125.0/24
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0079
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.233.212.96/28
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0080
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.240.0.0/12
+    ports:
+    - port: 80
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0081
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.237.25.127/32
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0082
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.233.68.224/28
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0083
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.243.230.132/32
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0084
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.139.171.0/24
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0085
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.70.64.0/20
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0086
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.109.32.0/20
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0087
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.215.199.10/32
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0088
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.244.0.0/16
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0089
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.199.172.192/28
+    ports:
+    - port: 8080
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0090
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.239.64.0/20
+    ports:
+    - port: 80
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0091
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.42.219.69/32
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0092
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.93.16.0/20
+    ports:
+    - port: 5432
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0093
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.108.0.0/16
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0094
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.142.215.129/32
+    ports:
+    - port: 443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0095
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.240.0.0/16
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0096
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.64.242.0/24
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0097
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.13.144.0/20
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0098
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.38.124.48/28
+    ports:
+    - port: 3306
+      protocol: TCP
+  selector:
+    app: workload
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0099
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.61.21.0/24
+    ports:
+    - port: 6379
+      protocol: TCP
+  selector:
+    app: workload

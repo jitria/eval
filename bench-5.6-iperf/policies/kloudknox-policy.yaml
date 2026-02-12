@@ -1,0 +1,40 @@
+###############################################################################
+# KloudKnox Policy — 5.6-iperf
+#
+# iperf3 서버 Pod의 네트워크/프로세스를 KloudKnox가 모니터링하도록 Audit 정책 적용.
+# cgroup-BPF 인라인 검증 경로에서의 오버헤드를 측정하기 위함.
+#
+# 적용: kubectl apply -f kloudknox-policy.yaml
+# 제거: kubectl delete -f kloudknox-policy.yaml
+###############################################################################
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-iperf-network-audit
+  namespace: bench-iperf
+spec:
+  selector:
+    app: iperf-server
+  network:
+    - direction: ingress
+      ports:
+        - protocol: TCP
+          port: 5201
+    - direction: egress
+      ipBlock:
+        cidr: 10.244.0.0/16
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-iperf-process-audit
+  namespace: bench-iperf
+spec:
+  selector:
+    app: iperf-server
+  process:
+    - path: /usr/bin/iperf3
+    - dir: /usr/bin/
+      recursive: false
+  action: Audit
