@@ -1,4 +1,0 @@
-label,trial,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,samples
-tetragon,1,5.57,1.63,104.3,17.7,12
-tetragon,2,5.46,2.04,98.2,0.4,12
-tetragon,3,5.36,1.96,97.8,0.3,12

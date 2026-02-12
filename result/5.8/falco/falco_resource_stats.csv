@@ -1,2 +1,0 @@
-label,trials,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem
-falco,3,6.25,4.98,433.7,301.9

@@ -1,0 +1,4 @@
+label,syscall,trials,filter,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_mean_us,std_mean_us,avg_count,std_count
+falco,execve,3,iqr,10,0,11,0,10,0,286858,73395
+falco,openat,3,iqr,2,0,2,0,2,0,3402,131
+falco,connect,3,iqr,27,0,32,1,27,0,963642,206249

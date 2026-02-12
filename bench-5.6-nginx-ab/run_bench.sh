@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.9 Nginx ab (closed-loop HTTP benchmark)
+# run_bench.sh — 5.6 Nginx ab (closed-loop HTTP benchmark)
 #
 # wrk2 대신 Apache Bench(ab) 사용:
 #   - closed-loop 모델 (동시 연결 수 고정, 총 요청 수 기반)
@@ -20,7 +20,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NS="bench-nginx-ab"
-RESULT_HOST="/tmp/2026SoCC/bench-5.9"
+RESULT_HOST="/tmp/2026SoCC/bench-5.6"
 LABEL="${2:-vanilla}"
 TRIALS="${TRIALS:-3}"
 TOTAL_REQUESTS="${TOTAL_REQUESTS:-10000}"
@@ -31,8 +31,8 @@ WARMUP_REQUESTS="${WARMUP_REQUESTS:-1000}"
 SERVER_URL="http://nginx-ab-svc.bench-nginx-ab.svc.cluster.local:80/"
 AB_POD="ab-client"
 
-log()  { echo -e "\e[1;36m[5.9]\e[0m $*"; }
-warn() { echo -e "\e[1;33m[5.9]\e[0m $*"; }
+log()  { echo -e "\e[1;36m[5.6]\e[0m $*"; }
+warn() { echo -e "\e[1;33m[5.6]\e[0m $*"; }
 
 ab_exec() { kubectl -n "${NS}" exec "${AB_POD}" -- bash -c "ulimit -n 65535; $1" 2>&1; }
 

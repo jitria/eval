@@ -41,7 +41,7 @@ WRK_POD="wrk2-client"
 log()  { echo -e "\e[1;36m[5.6]\e[0m $*"; }
 warn() { echo -e "\e[1;33m[5.6]\e[0m $*"; }
 
-wrk_exec() { kubectl -n "${NS}" exec "${WRK_POD}" -- bash -c "$1" 2>&1; }
+wrk_exec() { kubectl -n "${NS}" exec "${WRK_POD}" -- bash -c "ulimit -n 65535; $1" 2>&1; }
 
 # ── 정책 적용 검증 ─────────────────────────────────────────────────
 verify_policy() {

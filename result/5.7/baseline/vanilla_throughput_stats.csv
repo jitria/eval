@@ -1,6 +1,0 @@
-label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_latency_us,std_latency_us
-vanilla,10,3,88175.1,539.1,11.34,0.07
-vanilla,50,3,87506.1,514.6,11.43,0.07
-vanilla,100,3,87212.9,310.1,11.47,0.04
-vanilla,250,3,87859.2,412.5,11.38,0.05
-vanilla,500,3,87984.9,351.8,11.37,0.05

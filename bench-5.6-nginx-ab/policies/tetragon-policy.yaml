@@ -1,5 +1,5 @@
 ###############################################################################
-# Tetragon TracingPolicy — 5.9 Nginx ab
+# Tetragon TracingPolicy — 5.6 Nginx ab
 #
 # 주요 syscall 및 커널 함수를 kprobe로 트레이싱.
 # 컨테이너 프로세스만 대상 (호스트 Mnt/Pid 네임스페이스 제외).

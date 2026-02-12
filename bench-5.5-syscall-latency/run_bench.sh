@@ -140,7 +140,7 @@ verify_policy() {
 
 # ── 정책 적용/제거 ─────────────────────────────────────────────────
 apply_policy() {
-    [[ "${LABEL}" == "vanilla" ]] && return
+    [[ "${LABEL}" == "vanilla" || "${LABEL}" == "kloudknox" ]] && return
     log "정책 적용 (${LABEL})"
     case "${LABEL}" in
         kloudknox)
@@ -160,7 +160,7 @@ apply_policy() {
 }
 
 remove_policy() {
-    [[ "${LABEL}" == "vanilla" ]] && return
+    [[ "${LABEL}" == "vanilla" || "${LABEL}" == "kloudknox" ]] && return
     log "정책 제거 (${LABEL})"
     case "${LABEL}" in
         kloudknox)

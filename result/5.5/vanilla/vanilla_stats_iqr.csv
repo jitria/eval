@@ -1,0 +1,4 @@
+label,syscall,trials,filter,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_mean_us,std_mean_us,avg_count,std_count
+vanilla,execve,3,iqr,4,0,4,0,4,0,4410,1105
+vanilla,openat,3,iqr,1,0,1,0,1,0,3713,205
+vanilla,connect,3,iqr,25,0,27,0,25,0,13514,664

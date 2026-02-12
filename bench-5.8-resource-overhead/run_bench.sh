@@ -3,7 +3,7 @@
 # run_bench.sh — 5.8 Agent Resource Overhead
 #
 # HTTP 부하(ab) 중 보안 에이전트 CPU/Memory 사용량 측정.
-# bench-5.9의 Nginx+ab 인프라를 재사용하여 고정 concurrency(c=300)로
+# bench-5.6의 Nginx+ab 인프라를 재사용하여 고정 concurrency(c=300)로
 # 60초 동안 부하를 걸면서 에이전트 프로세스의 CPU%와 Memory(MB)를 샘플링.
 #
 # 아키텍처:
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BENCH59_DIR="${SCRIPT_DIR}/../bench-5.9-nginx-ab"
+BENCH56_DIR="${SCRIPT_DIR}/../bench-5.6-nginx-ab"
 
 NS="bench-nginx-ab"
 NS_RESOURCE="bench-resource"
@@ -230,12 +230,12 @@ compute_resource_stats() {
 do_deploy() {
     log "===== 인프라 배포 ====="
 
-    # 1. bench-5.9 인프라 (nginx + ab-client)
-    log "bench-5.9 인프라 배포 (nginx + ab-client)"
-    kubectl apply -f "${BENCH59_DIR}/00-namespace.yaml"
-    kubectl apply -f "${BENCH59_DIR}/nginx-configmap.yaml"
-    kubectl apply -f "${BENCH59_DIR}/01-nginx-deployment.yaml"
-    kubectl apply -f "${BENCH59_DIR}/02-ab-client-pod.yaml"
+    # 1. bench-5.6 인프라 (nginx + ab-client)
+    log "bench-5.6 인프라 배포 (nginx + ab-client)"
+    kubectl apply -f "${BENCH56_DIR}/00-namespace.yaml"
+    kubectl apply -f "${BENCH56_DIR}/nginx-configmap.yaml"
+    kubectl apply -f "${BENCH56_DIR}/01-nginx-deployment.yaml"
+    kubectl apply -f "${BENCH56_DIR}/02-ab-client-pod.yaml"
 
     kubectl -n "${NS}" rollout status deployment/nginx-ab --timeout=120s
     kubectl -n "${NS}" wait --for=condition=Ready pod/${AB_POD} --timeout=120s

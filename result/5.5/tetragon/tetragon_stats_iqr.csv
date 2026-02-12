@@ -1,0 +1,4 @@
+label,syscall,trials,filter,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_mean_us,std_mean_us,avg_count,std_count
+tetragon,execve,3,iqr,7,0,8,0,7,0,51580,924
+tetragon,openat,3,iqr,5,0,8,0,5,0,2293,152
+tetragon,connect,3,iqr,33,0,38,1,33,0,496686,452094
