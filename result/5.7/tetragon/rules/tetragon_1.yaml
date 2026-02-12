@@ -1,0 +1,26 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-scale-0000
+spec:
+  kprobes:
+  - args:
+    - index: 1
+      type: sockaddr
+    call: __x64_sys_connect
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: Prefix
+        values:
+        - 10.48.0.0/12
+      matchNamespaces:
+      - namespace: Mnt
+        operator: NotIn
+        values:
+        - host_ns
+      - namespace: Pid
+        operator: NotIn
+        values:
+        - host_ns
+    syscall: true

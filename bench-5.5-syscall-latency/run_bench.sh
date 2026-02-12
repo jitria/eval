@@ -1,30 +1,11 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.5 Syscall Latency (v5 - 단일 노드)
+# run_bench.sh — 5.5 Syscall Latency
 #
-# 개선 사항 (v4 → v5):
-#   - connect를 cross-node → 단일 노드(compute-node-1)로 변경
-#     네트워크 홉 제거 → 순수 syscall 오버헤드만 측정
-#   - trial별 즉시 통계 표시 (p50/p99/avg ± stddev)
-#
-# 기존 유지:
-#   1) openat 샘플 수 증가: OPENAT_MULT 배수
-#   2) trial 간 독립성: drop_caches + sync + sleep
-#   3) IQR 기반 outlier 필터링: raw/iqr 양쪽 통계 출력
-#   4) CPU pinning: taskset으로 lmbench를 특정 코어에 고정
-#   5) 결과 전송: kubectl cp 우선, 실패 시 cat fallback
-#   6) comm 필터, printf 개별 ns, 실제 워밍업
-#
-# 아키텍처 (단일 노드):
-#   compute-node-1
-#   ├── bpftrace DaemonSet (privileged, hostPID)
-#   │   └── trace_{execve,openat,connect}.bt
-#   ├── workload Pod (lmbench)
-#   │   ├── lat_proc exec       (execve)
-#   │   ├── lat_syscall open    (openat)
-#   │   └── lat_connect <서버IP> (connect, same-node)
-#   └── tcp-server Pod
-#       └── bw_tcp -s (TCP accept 서버)
+# 아키텍처 (boar 단일 노드):
+#   bpftrace DaemonSet — syscall tracepoint 캡처
+#   workload Pod — lmbench (lat_proc, lat_syscall, lat_connect)
+#   tcp-server Pod — bw_tcp -s (connect 측정용)
 #
 # 사용법:
 #   bash run_bench.sh run   [vanilla|kloudknox|falco|tetragon]
@@ -329,7 +310,7 @@ kill -9 \$PID 2>/dev/null || true
 
     # 서버 Pod IP
     SERVER_IP=$(kubectl -n "${NS}" get pod tcp-server -o jsonpath='{.status.podIP}')
-    log "서버 Pod IP: ${SERVER_IP} (compute-node-1, same-node)"
+    log "서버 Pod IP: ${SERVER_IP} (boar, same-node)"
 
     log "Pod 배치 확인:"
     kubectl -n "${NS}" get pods -o wide
@@ -404,7 +385,7 @@ do_run() {
     # 시스템 정보
     tracer_exec "{ uname -a; lscpu | head -20; free -h; } > /results/${LABEL}_sysinfo.txt"
 
-    # TCP 서버 시작 (서버 Pod, compute-node-1 same-node)
+    # TCP 서버 시작 (서버 Pod, boar same-node)
     log "TCP 서버 시작 (bw_tcp -s on ${SERVER_IP}, same-node)"
     server_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
     sleep 2
@@ -502,6 +483,9 @@ echo 'warm-up done'
 
     # TCP 서버 종료
     server_exec 'pkill -f "bw_tcp" 2>/dev/null || true' || true
+
+    # 정책 제거
+    remove_policy
 
     # ── cross-trial 통계 ──────────────────────────────────────────────
     log "===== Cross-trial 통계 계산 ====="

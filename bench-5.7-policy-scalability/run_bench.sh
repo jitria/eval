@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.7 Policy Scalability (v6 - ab 기반으로 전환)
-#
-# 개선 사항 (v5 → v6):
-#   - lmbench(lat_connect + bpftrace) → ab(Apache Bench + Nginx)로 전환
-#   - latency/throughput 분리 → 단일 run 모드 (ab가 둘 다 제공)
-#   - 에이전트 CPU/Memory 모니터링 유지 (bpftrace DaemonSet의 privileged pod)
+# run_bench.sh — 5.7 Policy Scalability
 #
 # 아키텍처:
-#   compute-node-1 (클라이언트)
-#   ├── bpftrace DaemonSet (privileged, hostPID) — monitor_agent.sh 실행
+#   boar (클라이언트)
+#   ├── monitor DaemonSet (privileged, hostPID) — 에이전트/노드 리소스 샘플링
 #   └── ab-client Pod — ab 실행
-#   compute-node-2 (서버)
+#   camel (서버)
 #   └── Nginx Deployment — HTTP 서버
 #
 # 사용법:
-#   bash run_bench.sh run     [vanilla|kloudknox|falco|tetragon]
+#   bash run_bench.sh run     [kloudknox|falco|tetragon]
 #   bash run_bench.sh deploy
 #   bash run_bench.sh cleanup
 ###############################################################################
@@ -27,12 +22,10 @@ LABEL="${2:-vanilla}"
 RESULT_HOST="$(dirname "${SCRIPT_DIR}")/result/5.7/${LABEL}"
 TRIALS="${TRIALS:-3}"
 COOLDOWN="${COOLDOWN:-5}"
-RULE_COUNTS="${RULE_COUNTS:-10 50 100 250}"
+RULE_COUNTS="${RULE_COUNTS:-1 3 7 10}"
+CONCURRENCY_LEVELS="${CONCURRENCY_LEVELS:-1 5 10 50 100}"
+BENCH_DURATION="${BENCH_DURATION:-10}"
 MONITOR_INTERVAL="${MONITOR_INTERVAL:-1}"
-
-# ab 파라미터
-TOTAL_REQUESTS="${TOTAL_REQUESTS:-500000}"
-CONCURRENCY="${CONCURRENCY:-1000}"
 WARMUP_REQUESTS="${WARMUP_REQUESTS:-1000}"
 
 # 에이전트 이름 매핑 (vanilla이면 빈 문자열 → 모니터링 스킵)
@@ -96,36 +89,38 @@ parse_ab_result() {
 compute_cross_trial_stats() {
     local summary_csv="$1" stats_csv="$2"
 
-    echo "label,rule_count,trials,avg_rps,std_rps,avg_mean_us,std_mean_us,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_max_us,std_max_us" > "${stats_csv}"
+    echo "label,concurrency,rule_count,trials,avg_rps,std_rps,avg_mean_us,std_mean_us,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_max_us,std_max_us" > "${stats_csv}"
 
-    for rc in ${RULE_COUNTS}; do
-        grep "^${LABEL},${rc}," "${summary_csv}" 2>/dev/null | awk -F',' \
-            -v label="${LABEL}" -v rc="${rc}" '
-        {
-            n++
-            srps  += $5;  sqrps  += $5*$5
-            smean += $6;  sqmean += $6*$6
-            sp50  += $7;  sqp50  += $7*$7
-            sp99  += $10; sqp99  += $10*$10
-            smax  += $11; sqmax  += $11*$11
-        }
-        END {
-            if (n == 0) exit
-            arps  = srps/n;  amean = smean/n
-            ap50  = sp50/n;  ap99  = sp99/n;  amax = smax/n
+    for conc in ${CONCURRENCY_LEVELS}; do
+        for rc in ${RULE_COUNTS}; do
+            grep "^${LABEL},${conc},${rc}," "${summary_csv}" 2>/dev/null | awk -F',' \
+                -v label="${LABEL}" -v conc="${conc}" -v rc="${rc}" '
+            {
+                n++
+                srps  += $6;  sqrps  += $6*$6
+                smean += $7;  sqmean += $7*$7
+                sp50  += $8;  sqp50  += $8*$8
+                sp99  += $11; sqp99  += $11*$11
+                smax  += $12; sqmax  += $12*$12
+            }
+            END {
+                if (n == 0) exit
+                arps  = srps/n;  amean = smean/n
+                ap50  = sp50/n;  ap99  = sp99/n;  amax = smax/n
 
-            vrps  = sqrps/n  - arps*arps;   sdrps  = sqrt(vrps  > 0 ? vrps  : 0)
-            vmean = sqmean/n - amean*amean;  sdmean = sqrt(vmean > 0 ? vmean : 0)
-            vp50  = sqp50/n  - ap50*ap50;    sdp50  = sqrt(vp50  > 0 ? vp50  : 0)
-            vp99  = sqp99/n  - ap99*ap99;    sdp99  = sqrt(vp99  > 0 ? vp99  : 0)
-            vmax  = sqmax/n  - amax*amax;    sdmax  = sqrt(vmax  > 0 ? vmax  : 0)
+                vrps  = sqrps/n  - arps*arps;   sdrps  = sqrt(vrps  > 0 ? vrps  : 0)
+                vmean = sqmean/n - amean*amean;  sdmean = sqrt(vmean > 0 ? vmean : 0)
+                vp50  = sqp50/n  - ap50*ap50;    sdp50  = sqrt(vp50  > 0 ? vp50  : 0)
+                vp99  = sqp99/n  - ap99*ap99;    sdp99  = sqrt(vp99  > 0 ? vp99  : 0)
+                vmax  = sqmax/n  - amax*amax;    sdmax  = sqrt(vmax  > 0 ? vmax  : 0)
 
-            printf "%s,%s,%d,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f\n",
-                label, rc, n,
-                arps, sdrps, amean, sdmean,
-                ap50, sdp50, ap99, sdp99,
-                amax, sdmax
-        }' >> "${stats_csv}" || true
+                printf "%s,%s,%s,%d,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f\n",
+                    label, conc, rc, n,
+                    arps, sdrps, amean, sdmean,
+                    ap50, sdp50, ap99, sdp99,
+                    amax, sdmax
+            }' >> "${stats_csv}" || true
+        done
     done
 }
 
@@ -151,7 +146,6 @@ verify_policy() {
             done
             if [[ "${ok}" == "true" ]]; then
                 log "    KloudKnox 정책 리소스 확인 (bench-scale-0000 존재)"
-                # agent가 정책을 로드할 시간 대기
                 local kx_wait=$(( ${1:-10} / 10 ))
                 [[ ${kx_wait} -lt 3 ]] && kx_wait=3
                 [[ ${kx_wait} -gt 30 ]] && kx_wait=30
@@ -181,7 +175,6 @@ verify_policy() {
                 || { warn "  Falco 룰 파일 미확인"; return 1; }
             ;;
         tetragon)
-            # kubectl apply 직후 첫 번째 리소스 존재 확인 (전체 list 대신 단건 조회)
             for _i in $(seq 1 30); do
                 if kubectl get tracingpolicy bench-scale-0000 2>/dev/null | grep -q "bench-scale"; then
                     ok=true; break
@@ -191,13 +184,11 @@ verify_policy() {
             if [[ "${ok}" == "true" ]]; then
                 log "    TracingPolicy K8s 리소스 확인 (bench-scale-0000 존재)"
 
-                # tetra tracingpolicy list로 센서 실제 로드 대기
                 local tpod
                 tpod=$(kubectl -n kube-system get pods -l app.kubernetes.io/name=tetragon \
                     --field-selector=status.phase=Running \
                     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
                 if [[ -n "${tpod}" ]]; then
-                    # bench-scale 정책만 카운트
                     local expect="${1:-0}"
                     for _i in $(seq 1 180); do
                         local loaded
@@ -248,7 +239,6 @@ unload_rules() {
     case "${LABEL}" in
         kloudknox)
             kubectl delete -f "${RESULT_HOST}/rules/kloudknox_${count}.yaml" --ignore-not-found 2>/dev/null || true
-            # 리소스 제거 확인 (단건 조회)
             for _i in $(seq 1 60); do
                 if ! kubectl -n "${NS}" get kloudknoxpolicy.security.boanlab.com bench-scale-0000 2>/dev/null | grep -q "bench-scale"; then
                     break
@@ -263,7 +253,6 @@ unload_rules() {
             kubectl delete -f "${RESULT_HOST}/rules/tetragon_${count}.yaml" --ignore-not-found 2>/dev/null || true
             sleep "${wait_sec}"
 
-            # 1) K8s 리소스 제거 확인 (단건 조회로 확인)
             for _i in $(seq 1 60); do
                 if ! kubectl get tracingpolicy bench-scale-0000 2>/dev/null | grep -q "bench-scale"; then
                     break
@@ -272,7 +261,6 @@ unload_rules() {
                 sleep 2
             done
 
-            # 2) Tetragon 내부 센서 제거 확인 (tetra tracingpolicy list)
             local tpod
             tpod=$(kubectl -n kube-system get pods -l app.kubernetes.io/name=tetragon \
                 --field-selector=status.phase=Running \
@@ -294,11 +282,11 @@ unload_rules() {
 
 # ── 에이전트 리소스 모니터링 ───────────────────────────────────────────
 start_monitor() {
-    local rule_count="$1" trial="$2"
-    [[ -z "${AGENT_NAME}" ]] && return 0  # vanilla → 스킵
+    local rule_count="$1" trial="$2" conc="$3"
+    [[ -z "${AGENT_NAME}" ]] && return 0
 
-    local csv="/results/${LABEL}_resource_rules${rule_count}_trial${trial}.csv"
-    log "    모니터링 시작 (agent=${AGENT_NAME}, interval=${MONITOR_INTERVAL}s, rules=${rule_count}, trial=${trial})"
+    local csv="/results/${LABEL}_resource_c${conc}_rules${rule_count}_trial${trial}.csv"
+    log "    모니터링 시작 (agent=${AGENT_NAME}, c=${conc}, rules=${rule_count}, trial=${trial})"
     tracer_exec "
 nohup bash /scripts/monitor_agent.sh '${AGENT_NAME}' '${MONITOR_INTERVAL}' '${rule_count}' '${csv}' >/dev/null 2>&1 &
 echo \$! > /tmp/mon_pid
@@ -306,13 +294,13 @@ echo \$! > /tmp/mon_pid
 }
 
 stop_monitor() {
-    local rule_count="$1" trial="$2"
+    local rule_count="$1" trial="$2" conc="$3"
     [[ -z "${AGENT_NAME}" ]] && return 0
 
-    local csv="/results/${LABEL}_resource_rules${rule_count}_trial${trial}.csv"
-    local local_csv="${RESULT_HOST}/${LABEL}_resource_rules${rule_count}_trial${trial}.csv"
+    local csv="/results/${LABEL}_resource_c${conc}_rules${rule_count}_trial${trial}.csv"
+    local local_csv="${RESULT_HOST}/${LABEL}_resource_c${conc}_rules${rule_count}_trial${trial}.csv"
 
-    log "    모니터링 중지 (rules=${rule_count}, trial=${trial})"
+    log "    모니터링 중지 (c=${conc}, rules=${rule_count}, trial=${trial})"
     tracer_exec '
 MON_PID=$(cat /tmp/mon_pid 2>/dev/null)
 if [ -n "${MON_PID}" ] && kill -0 ${MON_PID} 2>/dev/null; then
@@ -321,7 +309,6 @@ if [ -n "${MON_PID}" ] && kill -0 ${MON_PID} 2>/dev/null; then
 fi
 ' || true
 
-    # CSV 호스트로 복사
     kubectl cp "${NS}/${TRACER_POD}:${csv}" "${local_csv}" 2>/dev/null || \
         tracer_exec "cat ${csv}" > "${local_csv}" 2>/dev/null || true
 
@@ -338,15 +325,41 @@ compute_resource_summary() {
     [[ -z "${AGENT_NAME}" ]] && return 0
 
     local out="${RESULT_HOST}/${LABEL}_resource.csv"
+<<<<<<< HEAD
     echo "label,rule_count,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,avg_node_cpu,std_node_cpu,avg_node_sys,std_node_sys,samples" > "${out}"
+=======
+    echo "label,concurrency,rule_count,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,avg_node_cpu,std_node_cpu,avg_node_mem,std_node_mem,samples" > "${out}"
+>>>>>>> e095930 (Update raw data)
 
-    for rc in ${RULE_COUNTS}; do
-        # 모든 trial의 raw CSV를 합산
-        local merged=""
-        for t in $(seq 1 "${TRIALS}"); do
-            local raw="${RESULT_HOST}/${LABEL}_resource_rules${rc}_trial${t}.csv"
-            [[ -f "${raw}" && -s "${raw}" ]] && merged="${merged} ${raw}"
+    for conc in ${CONCURRENCY_LEVELS}; do
+        for rc in ${RULE_COUNTS}; do
+            local merged=""
+            for t in $(seq 1 "${TRIALS}"); do
+                local raw="${RESULT_HOST}/${LABEL}_resource_c${conc}_rules${rc}_trial${t}.csv"
+                [[ -f "${raw}" && -s "${raw}" ]] && merged="${merged} ${raw}"
+            done
+            [[ -z "${merged}" ]] && continue
+
+            awk -F',' -v label="${LABEL}" -v conc="${conc}" -v rc="${rc}" '
+            FNR > 1 && NF >= 7 {
+                n++
+                sc += $3; sqc += $3*$3
+                sm += $4; sqm += $4*$4
+                snc += $5; sqnc += $5*$5
+                snm += $6; sqnm += $6*$6
+            }
+            END {
+                if (n == 0) exit
+                ac = sc/n; am = sm/n; anc = snc/n; anm = snm/n
+                vc = sqc/n - ac*ac; sdc = sqrt(vc > 0 ? vc : 0)
+                vm = sqm/n - am*am; sdm = sqrt(vm > 0 ? vm : 0)
+                vnc = sqnc/n - anc*anc; sdnc = sqrt(vnc > 0 ? vnc : 0)
+                vnm = sqnm/n - anm*anm; sdnm = sqrt(vnm > 0 ? vnm : 0)
+                printf "%s,%s,%s,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%d\n",
+                    label, conc, rc, ac, sdc, am, sdm, anc, sdnc, anm, sdnm, n
+            }' ${merged} >> "${out}" || true
         done
+<<<<<<< HEAD
         [[ -z "${merged}" ]] && continue
 
         awk -F',' -v label="${LABEL}" -v rc="${rc}" '
@@ -367,6 +380,8 @@ compute_resource_summary() {
             printf "%s,%s,%.2f,%.2f,%.1f,%.1f,%.2f,%.2f,%.2f,%.2f,%d\n",
                 label, rc, ac, sdc, am, sdm, anc, sdnc, ans, sdns, n
         }' ${merged} >> "${out}" || true
+=======
+>>>>>>> e095930 (Update raw data)
     done
 
     log "===== 에이전트 리소스 요약 ====="
@@ -450,57 +465,65 @@ do_setup() {
     fi
     log "서버 연결 확인 완료"
 
-    log "===== Warm-up (${WARMUP_REQUESTS} requests, c=${CONCURRENCY}) ====="
-    ab_exec "ab -n ${WARMUP_REQUESTS} -c ${CONCURRENCY} ${SERVER_URL} > /dev/null 2>&1" || true
+    local max_conc
+    max_conc=$(echo ${CONCURRENCY_LEVELS} | tr ' ' '\n' | sort -n | tail -1)
+    log "===== Warm-up (c=${max_conc}, ${WARMUP_REQUESTS} requests) ====="
+    ab_exec "ab -n ${WARMUP_REQUESTS} -c ${max_conc} ${SERVER_URL} > /dev/null 2>&1" || true
     log "Warm-up 완료"
     sleep 3
     flush_caches
 }
 
-# ── run (ab 측정, 규칙 수별) ─────────────────────────────────────────
+# ── run (ab 측정, 규칙 수 × 동시 연결 수별) ──────────────────────────
 do_run() {
     do_setup
 
     local summary="${RESULT_HOST}/${LABEL}_ab_summary.csv"
-    echo "label,rule_count,trial,total_reqs,rps,mean_us,p50_us,p90_us,p95_us,p99_us,max_us,failed,transfer_kbps" > "${summary}"
+    echo "label,concurrency,rule_count,trial,total_reqs,rps,mean_us,p50_us,p90_us,p95_us,p99_us,max_us,failed,transfer_kbps" > "${summary}"
 
     for rule_count in ${RULE_COUNTS}; do
-        log "===== 규칙 수: ${rule_count} (c=${CONCURRENCY}, n=${TOTAL_REQUESTS}) ====="
+        log "===== 규칙 수: ${rule_count} ====="
         [[ "${LABEL}" != "vanilla" ]] && load_rules "${rule_count}"
 
-        for trial in $(seq 1 "${TRIALS}"); do
-            local tag="ab_rules${rule_count}_trial${trial}"
-            local remote="/results/${LABEL}_${tag}.txt"
-            local local_f="${RESULT_HOST}/${LABEL}_${tag}.txt"
+        for conc in ${CONCURRENCY_LEVELS}; do
+            log "  --- c=${conc}, rules=${rule_count}, duration=${BENCH_DURATION}s ---"
 
-            start_monitor "${rule_count}" "${trial}"
+            for trial in $(seq 1 "${TRIALS}"); do
+                local tag="ab_c${conc}_rules${rule_count}_trial${trial}"
+                local remote="/results/${LABEL}_${tag}.txt"
+                local local_f="${RESULT_HOST}/${LABEL}_${tag}.txt"
 
-            log "  [rules=${rule_count}, trial ${trial}/${TRIALS}] ab -n ${TOTAL_REQUESTS} -c ${CONCURRENCY}"
-            ab_exec "ab -n ${TOTAL_REQUESTS} -c ${CONCURRENCY} ${SERVER_URL} > ${remote} 2>&1" || true
+                start_monitor "${rule_count}" "${trial}" "${conc}"
 
-            stop_monitor "${rule_count}" "${trial}"
+                log "  [c=${conc}, rules=${rule_count}, trial ${trial}/${TRIALS}] ab -t ${BENCH_DURATION} -c ${conc}"
+                ab_exec "ab -n 9999999 -t ${BENCH_DURATION} -c ${conc} ${SERVER_URL} > ${remote} 2>&1" || true
 
-            # 결과 복사 + 파싱
-            kubectl cp "${NS}/${AB_POD}:${remote}" "${local_f}" 2>/dev/null || \
-                ab_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
+                stop_monitor "${rule_count}" "${trial}" "${conc}"
 
-            if [[ -f "${local_f}" && -s "${local_f}" ]]; then
-                local stats
-                stats=$(parse_ab_result "${local_f}")
-                echo "${LABEL},${rule_count},${trial},${stats}" >> "${summary}"
+                # 결과 복사 + 파싱
+                kubectl cp "${NS}/${AB_POD}:${remote}" "${local_f}" 2>/dev/null || \
+                    ab_exec "cat ${remote}" > "${local_f}" 2>/dev/null || true
 
-                local rps_d mean_d p50_d p99_d failed_d
-                rps_d=$(echo "${stats}" | cut -d, -f2)
-                mean_d=$(echo "${stats}" | cut -d, -f3)
-                p50_d=$(echo "${stats}" | cut -d, -f4)
-                p99_d=$(echo "${stats}" | cut -d, -f7)
-                failed_d=$(echo "${stats}" | cut -d, -f9)
-                log "    RPS=${rps_d}  mean=${mean_d}μs  p50=${p50_d}μs  p99=${p99_d}μs  failed=${failed_d}"
-            else
-                warn "    결과 없음"
-            fi
+                if [[ -f "${local_f}" && -s "${local_f}" ]]; then
+                    local stats
+                    stats=$(parse_ab_result "${local_f}")
+                    echo "${LABEL},${conc},${rule_count},${trial},${stats}" >> "${summary}"
 
-            [[ ${trial} -lt ${TRIALS} ]] && sleep "${COOLDOWN}"
+                    local rps_d mean_d p50_d p99_d failed_d
+                    rps_d=$(echo "${stats}" | cut -d, -f2)
+                    mean_d=$(echo "${stats}" | cut -d, -f3)
+                    p50_d=$(echo "${stats}" | cut -d, -f4)
+                    p99_d=$(echo "${stats}" | cut -d, -f7)
+                    failed_d=$(echo "${stats}" | cut -d, -f9)
+                    log "    RPS=${rps_d}  mean=${mean_d}μs  p50=${p50_d}μs  p99=${p99_d}μs  failed=${failed_d}"
+                else
+                    warn "    결과 없음"
+                fi
+
+                [[ ${trial} -lt ${TRIALS} ]] && sleep "${COOLDOWN}"
+            done
+
+            sleep "${COOLDOWN}"
         done
 
         [[ "${LABEL}" != "vanilla" ]] && unload_rules "${rule_count}"
@@ -520,13 +543,12 @@ do_run() {
     log "Cross-trial (avg +/- stddev):"
     column -t -s',' "${stats_csv}" 2>/dev/null || cat "${stats_csv}"
     echo ""
-    log "완료 (label=${LABEL}, trials=${TRIALS}, reqs=${TOTAL_REQUESTS}, c=${CONCURRENCY}, rules=[${RULE_COUNTS}])"
+    log "완료 (label=${LABEL}, trials=${TRIALS}, duration=${BENCH_DURATION}s, c=[${CONCURRENCY_LEVELS}], rules=[${RULE_COUNTS}])"
 }
 
 # ── cleanup ──────────────────────────────────────────────────────────
 do_cleanup() {
     log "전체 정리"
-    # 모든 정책 제거
     kubectl delete kloudknoxpolicy.security.boanlab.com --all -n "${NS}" --ignore-not-found 2>/dev/null || true
     if helm status falco -n falco &>/dev/null; then
         helm upgrade falco falcosecurity/falco -n falco --reuse-values \
@@ -543,17 +565,17 @@ case "${1:-help}" in
     cleanup)    do_cleanup ;;
     *)
         echo "사용법:"
-        echo "  bash $0 run     [vanilla|kloudknox|falco|tetragon]  # 벤치마크 실행"
-        echo "  bash $0 deploy                                       # 인프라 배포"
-        echo "  bash $0 cleanup                                      # 전체 정리"
+        echo "  bash $0 run     [kloudknox|falco|tetragon]  # 벤치마크 실행"
+        echo "  bash $0 deploy                               # 인프라 배포"
+        echo "  bash $0 cleanup                              # 전체 정리"
         echo ""
         echo "환경변수:"
-        echo "  TRIALS=3              반복 횟수 (기본 3)"
-        echo "  TOTAL_REQUESTS=10000  ab 총 요청 수 (기본 10000)"
-        echo "  CONCURRENCY=100       ab 동시 연결 수 (기본 100)"
-        echo "  COOLDOWN=5            trial 간 쿨다운 초 (기본 5)"
-        echo "  WARMUP_REQUESTS=1000  워밍업 요청 수 (기본 1000)"
-        echo "  MONITOR_INTERVAL=2    에이전트 리소스 샘플링 간격 (기본 2초)"
-        echo "  RULE_COUNTS='10 50 100 250'  규칙 수 리스트"
+        echo "  TRIALS=3                         반복 횟수 (기본 3)"
+        echo "  BENCH_DURATION=10                ab 실행 시간 초 (기본 10)"
+        echo "  CONCURRENCY_LEVELS='1 5 10 50 100'  동시 연결 수 리스트"
+        echo "  COOLDOWN=5                       trial 간 쿨다운 초 (기본 5)"
+        echo "  WARMUP_REQUESTS=1000             워밍업 요청 수 (기본 1000)"
+        echo "  MONITOR_INTERVAL=1               리소스 샘플링 간격 초 (기본 1)"
+        echo "  RULE_COUNTS='1 3 7 10'           규칙 수 리스트"
         ;;
 esac

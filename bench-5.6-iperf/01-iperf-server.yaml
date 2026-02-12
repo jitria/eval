@@ -1,5 +1,5 @@
 ###############################################################################
-# iperf3 서버 — compute-node-2에 배치
+# iperf3 서버 — camel에 배치
 # ClusterIP Service로 클러스터 내부 접근 (port 5201)
 ###############################################################################
 apiVersion: apps/v1
@@ -20,7 +20,7 @@ spec:
         app: iperf-server
     spec:
       nodeSelector:
-        kubernetes.io/hostname: compute-node-2
+        kubernetes.io/hostname: camel
       containers:
         - name: iperf3
           image: networkstatic/iperf3

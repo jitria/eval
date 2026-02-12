@@ -1,0 +1,4 @@
+timestamp,rule_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_mem_used_mb,node_mem_total_mb
+2026-02-12T22:27:42,10,79.41,156.4,4.3,2704,63960
+2026-02-12T22:27:43,10,75.87,156.4,5.0,2689,63960
+2026-02-12T22:27:44,10,74.89,156.4,4.2,2677,63960

@@ -1,12 +1,5 @@
 ###############################################################################
-# 5.7 — ConfigMap + DaemonSet (에이전트 리소스 모니터링용)
-#
-# 아키텍처:
-#   compute-node-1 (클라이언트)
-#     ├── bpftrace DaemonSet (privileged, hostPID) — monitor_agent.sh 실행
-#     └── ab-client Pod — ab 실행 (03-ab-client-pod.yaml)
-#   compute-node-2 (서버)
-#     └── Nginx Deployment (02-nginx-deployment.yaml)
+# 5.7 — ConfigMap (monitor_agent.sh) + DaemonSet (boar, privileged)
 ###############################################################################
 apiVersion: v1
 kind: ConfigMap
@@ -14,19 +7,10 @@ metadata:
   name: bpftrace-scripts
   namespace: bench-policy
 data:
-  trace_connect.bt: |
-    tracepoint:syscalls:sys_enter_connect / comm == "lat_connect" / {
-        @start[tid] = nsecs;
-    }
-    tracepoint:syscalls:sys_exit_connect / @start[tid] / {
-        $delta = nsecs - @start[tid];
-        printf("%llu\n", $delta);
-        @latency = hist($delta);
-        delete(@start[tid]);
-    }
   monitor_agent.sh: |
     #!/usr/bin/env bash
     ###########################################################################
+<<<<<<< HEAD
     # monitor_agent.sh — 에이전트 + 노드 CPU/Memory 샘플링 (5.7 Policy Scalability)
     #
     # 수집 항목:
@@ -42,6 +26,12 @@ data:
     #   $4 = output_file    (CSV 출력 경로)
     #
     # CSV: timestamp,rule_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_sys_pct
+=======
+    # monitor_agent.sh — 에이전트/노드 리소스 샘플링
+    #
+    # 인자: $1=agent_name  $2=interval  $3=rule_count  $4=output_file
+    # CSV: timestamp,rule_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_mem_used_mb,node_mem_total_mb
+>>>>>>> e095930 (Update raw data)
     ###########################################################################
     set -euo pipefail
 
@@ -50,7 +40,11 @@ data:
     RULE_COUNT="${3:-0}"
     OUTPUT="${4:-/results/monitor.csv}"
 
+<<<<<<< HEAD
     echo "timestamp,rule_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_sys_pct" > "${OUTPUT}"
+=======
+    echo "timestamp,rule_count,agent_cpu_pct,agent_mem_mb,node_cpu_pct,node_mem_used_mb,node_mem_total_mb" > "${OUTPUT}"
+>>>>>>> e095930 (Update raw data)
 
     # ── 에이전트 PID 탐색 (3단계 폴백) ──────────────────────────────
     AGENT_PID=""
@@ -147,7 +141,24 @@ data:
         # 에이전트 메모리 (VmRSS, KB→MB)
         agent_mem=$(read_agent_mem_mb "${AGENT_PID}")
 
+<<<<<<< HEAD
         echo "${ts},${RULE_COUNT},${agent_cpu},${agent_mem},${node_cpu},${node_sys}" >> "${OUTPUT}"
+=======
+        # 노드 CPU% (차분) — idle = field4+field5 (idle+iowait)
+        node_cpu=$(echo "${prev_stat}" "${curr_stat}" | awk '{
+            pt=$1+$2+$3+$4+$5+$6+$7+$8; ct=$9+$10+$11+$12+$13+$14+$15+$16
+            pi=$4+$5; ci=$12+$13
+            dt=ct-pt; di=ci-pi
+            if(dt>0) printf "%.1f",(dt-di)/dt*100; else printf "0.0"
+        }')
+
+        # 노드 메모리 (MemTotal - MemAvailable)
+        mem_info=$(awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{printf "%d %d",t/1024,(t-a)/1024}' /proc/meminfo 2>/dev/null || echo "0 0")
+        mem_total=${mem_info%% *}
+        mem_used=${mem_info##* }
+
+        echo "${ts},${RULE_COUNT},${agent_cpu},${agent_mem},${node_cpu},${mem_used},${mem_total}" >> "${OUTPUT}"
+>>>>>>> e095930 (Update raw data)
 
         prev_stat="${curr_stat}"
         prev_agent="${curr_agent}"
@@ -174,7 +185,7 @@ spec:
       hostPID: true
       hostNetwork: true
       nodeSelector:
-        kubernetes.io/hostname: compute-node-1
+        kubernetes.io/hostname: boar
       tolerations:
         - operator: Exists
       containers:

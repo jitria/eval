@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: bench-nginx-ab
   labels:
-    bench: "5.9"
+    bench: "5.6"

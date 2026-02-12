@@ -1,5 +1,5 @@
 ###############################################################################
-# Nginx 서버 — compute-node-2에 배치
+# Nginx 서버 — camel에 배치
 # NodePort 30081로 외부 접근
 ###############################################################################
 apiVersion: apps/v1
@@ -20,7 +20,7 @@ spec:
         app: nginx-ab
     spec:
       nodeSelector:
-        kubernetes.io/hostname: compute-node-2
+        kubernetes.io/hostname: camel
       containers:
         - name: nginx
           image: nginx:1.25-alpine

@@ -1,0 +1,16 @@
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-scale-0000
+  namespace: bench-policy
+spec:
+  action: Audit
+  network:
+  - direction: egress
+    ipBlock:
+      cidr: 10.48.0.0/12
+    ports:
+    - port: 8443
+      protocol: TCP
+  selector:
+    app: workload

@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.6 Nginx ab (closed-loop HTTP benchmark)
+# run_bench.sh — 5.6 HTTP Throughput & Latency (ab + Nginx)
 #
-# wrk2 대신 Apache Bench(ab) 사용:
-#   - closed-loop 모델 (동시 연결 수 고정, 총 요청 수 기반)
-#   - 레이턴시 + 처리량 동시 측정 → 단일 `run` 모드
-#
-# 아키텍처:
-#   Nginx (compute-node-2, Deployment + NodePort 30081)
-#     ← ab (compute-node-1, Pod + kubectl exec)
-#   ClusterIP Service 통한 HTTP 접속
+# 아키텍처 (cross-node):
+#   boar: ab-client Pod
+#   camel: Nginx Deployment + ClusterIP Service
 #
 # 사용법:
 #   bash run_bench.sh run     [vanilla|kloudknox|falco|tetragon]

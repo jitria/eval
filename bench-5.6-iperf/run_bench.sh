@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
 ###############################################################################
-# run_bench.sh — 5.6-iperf (TCP bandwidth benchmark with iperf3)
+# run_bench.sh — 5.6 TCP Bandwidth (iperf3)
 #
-# iperf3 기반 TCP 대역폭 벤치마크:
-#   - 병렬 스트림 수(-P)를 스케일링 변수로 사용
-#   - --json 출력 → jq 파싱 → Gbps 단위 결과
-#
-# 아키텍처:
-#   iperf3 server (compute-node-2, CPU 0, NUMA node0)
-#     ← veth →
-#   iperf3 client (compute-node-2, CPU 8, NUMA node0)
+# 아키텍처 (camel 단일 노드, veth 경로):
+#   iperf3 server (CPU 0) ← veth → iperf3 client (CPU 8)
 #
 # 사용법:
 #   bash run_bench.sh run     [vanilla|kloudknox|falco|tetragon]

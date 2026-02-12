@@ -1,8 +1,5 @@
 ###############################################################################
-# connect 워크로드 Job (5.7)
-#
-# 같은 Pod 내 sidecar TCP 서버에 대해 connect syscall을 반복 호출
-# RULE_COUNT 환경변수: 현재 적용된 규칙 수 (결과 파일 이름에 사용)
+# connect 워크로드 Job (미사용, 참고용)
 ###############################################################################
 apiVersion: batch/v1
 kind: Job
@@ -19,7 +16,7 @@ spec:
         app: connect-workload
     spec:
       nodeSelector:
-        kubernetes.io/hostname: compute-node-2
+        kubernetes.io/hostname: camel
       restartPolicy: Never
       containers:
         # ── TCP accept 서버 ──

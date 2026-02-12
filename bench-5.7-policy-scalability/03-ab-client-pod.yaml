@@ -1,6 +1,5 @@
 ###############################################################################
-# ab 클라이언트 Pod — compute-node-1에서 장기 실행
-# app: workload 라벨 → KloudKnox 정책 매칭용
+# ab 클라이언트 Pod — boar
 ###############################################################################
 apiVersion: v1
 kind: Pod
@@ -11,7 +10,7 @@ metadata:
     app: workload
 spec:
   nodeSelector:
-    kubernetes.io/hostname: compute-node-1
+    kubernetes.io/hostname: boar
   containers:
     - name: ab
       image: ubuntu:22.04

@@ -1,9 +1,5 @@
 ###############################################################################
-# TCP 서버 Pod — compute-node-1 (단일 노드) (5.5)
-#
-# lmbench bw_tcp -s 를 실행할 장기 실행 Pod.
-# workload Pod와 동일 노드(compute-node-1)에서 lat_connect 실행.
-# 단일 노드 배치로 네트워크 홉 제거 → 순수 syscall 오버헤드만 측정.
+# TCP 서버 Pod — boar (bw_tcp -s, connect 측정용)
 ###############################################################################
 apiVersion: v1
 kind: Pod
@@ -14,7 +10,7 @@ metadata:
     app: tcp-server
 spec:
   nodeSelector:
-    kubernetes.io/hostname: compute-node-1
+    kubernetes.io/hostname: boar
   containers:
     - name: server
       image: ubuntu:22.04

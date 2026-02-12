@@ -1,5 +1,5 @@
 ###############################################################################
-# ab 클라이언트 Pod — compute-node-1에서 장기 실행
+# ab 클라이언트 Pod — boar에서 장기 실행
 # run_bench.sh에서 kubectl exec으로 반복 측정
 ###############################################################################
 apiVersion: v1
@@ -11,7 +11,7 @@ metadata:
     app: ab-client
 spec:
   nodeSelector:
-    kubernetes.io/hostname: compute-node-1
+    kubernetes.io/hostname: boar
   containers:
     - name: ab
       image: ubuntu:22.04
@@ -22,5 +22,5 @@ spec:
   volumes:
     - name: results
       hostPath:
-        path: /tmp/2026SoCC/bench-5.9
+        path: /tmp/2026SoCC/bench-5.6
         type: DirectoryOrCreate
