@@ -1,4 +1,4 @@
 label,syscall,trials,filter,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_mean_us,std_mean_us,avg_count,std_count
-kloudknox,execve,3,iqr,5,0,6,0,5,0,3622,888
-kloudknox,openat,3,iqr,2,0,4,0,2,0,2086,105
-kloudknox,connect,3,iqr,31,1,35,1,31,1,14344,4085
+kloudknox,execve,3,iqr,5,0,5,0,5,0,2904,343
+kloudknox,openat,3,iqr,2,0,4,0,2,0,2097,214
+kloudknox,connect,3,iqr,31,1,35,2,32,1,10049,505

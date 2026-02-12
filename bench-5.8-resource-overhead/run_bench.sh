@@ -22,10 +22,9 @@ BENCH56_DIR="${SCRIPT_DIR}/../bench-5.6-nginx-ab"
 
 NS="bench-nginx-ab"
 NS_RESOURCE="bench-resource"
-RESULT_HOST="/tmp/2026SoCC/bench-5.8"
-
 MODE="${1:-help}"
 LABEL="${2:-vanilla}"
+RESULT_HOST="$(dirname "${SCRIPT_DIR}")/result/5.8/${LABEL}"
 
 # 에이전트 프로세스명 매핑
 AGENT_NAME=""

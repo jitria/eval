@@ -7,8 +7,9 @@
 # 카테고리:
 #   1) 프로세스: execve, execveat, exit_group, security_bprm_check, do_exit
 #   2) 파일: open, openat, openat2, close, security_file_open
-#   3) 네트워크: connect, inet_bind, inet_stream_connect, inet_csk_accept,
-#               udp_sendmsg, udp_recvmsg
+#   3) 네트워크-연결: connect, inet_bind, inet_stream_connect
+#   4) 네트워크-수락: inet_csk_accept
+#   5) 네트워크-UDP: udp_sendmsg, udp_recvmsg
 #
 # 적용: kubectl apply -f tetragon-policy.yaml
 # 제거: kubectl delete -f tetragon-policy.yaml
@@ -138,11 +139,11 @@ spec:
               operator: NotIn
               values: ["host_ns"]
 ---
-# ── 네트워크 ─────────────────────────────────────────────────────────
+# ── 네트워크-연결 ──────────────────────────────────────────────────────
 apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
-  name: bench-nginx-ab-network
+  name: bench-nginx-ab-net-conn
 spec:
   kprobes:
     - call: "__x64_sys_connect"
@@ -178,6 +179,14 @@ spec:
             - namespace: Pid
               operator: NotIn
               values: ["host_ns"]
+---
+# ── 네트워크-수락 ──────────────────────────────────────────────────────
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-nginx-ab-net-accept
+spec:
+  kprobes:
     - call: "inet_csk_accept"
       syscall: false
       return: true
@@ -195,6 +204,14 @@ spec:
             - namespace: Pid
               operator: NotIn
               values: ["host_ns"]
+---
+# ── 네트워크-UDP ───────────────────────────────────────────────────────
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-nginx-ab-net-udp
+spec:
+  kprobes:
     - call: "udp_sendmsg"
       syscall: false
       args:

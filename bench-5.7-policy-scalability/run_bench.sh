@@ -29,8 +29,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NS="bench-policy"
-RESULT_HOST="/tmp/2026SoCC/bench-5.7"
 LABEL="${2:-vanilla}"
+RESULT_HOST="$(dirname "${SCRIPT_DIR}")/result/5.7/${LABEL}"
 TRIALS="${TRIALS:-3}"
 WARMUP_SEC="${WARMUP_SEC:-30}"
 LMBENCH_REPS="${LMBENCH_REPS:-10}"

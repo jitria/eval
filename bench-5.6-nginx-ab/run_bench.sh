@@ -20,8 +20,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NS="bench-nginx-ab"
-RESULT_HOST="/tmp/2026SoCC/bench-5.6"
 LABEL="${2:-vanilla}"
+RESULT_HOST="$(dirname "${SCRIPT_DIR}")/result/5.6/${LABEL}"
 TRIALS="${TRIALS:-3}"
 TOTAL_REQUESTS="${TOTAL_REQUESTS:-10000}"
 CONN_LIST="${CONN_LIST:-1 10 50 100 500 1000}"

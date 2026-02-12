@@ -35,8 +35,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 NS="bench-syscall"
-RESULT_HOST="/tmp/2026SoCC/bench-5.5"
 LABEL="${2:-vanilla}"
+RESULT_HOST="$(dirname "${SCRIPT_DIR}")/result/5.5/${LABEL}"
 TRIALS="${TRIALS:-5}"
 WARMUP_SEC="${WARMUP_SEC:-30}"
 LMBENCH_REPS="${LMBENCH_REPS:-10}"
