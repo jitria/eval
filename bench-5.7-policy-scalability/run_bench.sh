@@ -12,15 +12,12 @@
 #   throughput — lat_connect 반복 실행, 규칙 수별 ops/sec 측정
 #
 # 아키텍처:
-#   compute-node-1 (클라이언트)
+#   compute-node-1 (클라이언트 + 서버, localhost)
 #   ├── bpftrace DaemonSet (privileged, hostPID)
 #   │   └── trace_connect.bt (comm=="lat_connect" + printf)
 #   └── workload Pod
-#       └── lat_connect <서버PodIP>
-#
-#   compute-node-2 (서버)
-#   └── tcp-server Pod
-#       └── bw_tcp -s (TCP accept 서버)
+#       ├── bw_tcp -s (TCP accept 서버, localhost)
+#       └── lat_connect 127.0.0.1
 #
 # 사용법:
 #   bash run_bench.sh latency    [vanilla|kloudknox|falco|tetragon]
@@ -48,8 +45,7 @@ warn() { echo -e "\e[1;33m[5.7]\e[0m $*"; }
 
 TRACER_POD=""
 WORKLOAD_POD="workload"
-SERVER_POD="tcp-server"
-SERVER_IP=""
+SERVER_IP="127.0.0.1"
 PIN_CMD=""
 
 get_tracer_pod() {
@@ -59,7 +55,6 @@ get_tracer_pod() {
 
 tracer_exec() { kubectl -n "${NS}" exec "${TRACER_POD}" -- bash -c "$1" 2>&1; }
 work_exec()   { kubectl -n "${NS}" exec "${WORKLOAD_POD}" -- bash -c "$1" 2>&1; }
-server_exec() { kubectl -n "${NS}" exec "${SERVER_POD}" -- bash -c "$1" 2>&1; }
 
 # ── CPU pinning 설정 ─────────────────────────────────────────────────
 setup_cpu_pin() {
@@ -176,22 +171,17 @@ do_deploy() {
     log "배포 시작"
     kubectl apply -f "${SCRIPT_DIR}/00-namespace.yaml"
     kubectl apply -f "${SCRIPT_DIR}/01-bpftrace-daemonset.yaml"
-    kubectl apply -f "${SCRIPT_DIR}/02-tcp-server-pod.yaml"
 
     log "DaemonSet 대기..."
     kubectl -n "${NS}" rollout status daemonset/bpftrace-tracer --timeout=120s
     log "workload Pod 대기..."
     kubectl -n "${NS}" wait --for=condition=Ready pod/workload --timeout=120s
-    log "tcp-server Pod 대기..."
-    kubectl -n "${NS}" wait --for=condition=Ready pod/tcp-server --timeout=120s
 
     TRACER_POD=$(get_tracer_pod)
     log "bpftrace 설치 (${TRACER_POD})"
     tracer_exec 'apt-get update -qq && apt-get install -y -qq bpftrace >/dev/null 2>&1 && bpftrace --version'
 
-    # 서버 Pod IP 가져오기
-    SERVER_IP=$(kubectl -n "${NS}" get pod tcp-server -o jsonpath='{.status.podIP}')
-    log "서버 Pod IP: ${SERVER_IP} (compute-node-2)"
+    log "서버: localhost (127.0.0.1) — 네트워크 RTT 제거, 커널 오버헤드만 측정"
 
     # 규칙 파일 생성
     log "규칙 세트 생성 (${LABEL})"
@@ -227,7 +217,7 @@ do_deploy() {
 
     # 바이너리 확인
     work_exec 'ls -la /tools/bin/lat_connect' || { warn "lat_connect 바이너리 없음"; return 1; }
-    server_exec 'ls -la /tools/bin/bw_tcp' || { warn "bw_tcp 바이너리 없음"; return 1; }
+    work_exec 'ls -la /tools/bin/bw_tcp' || { warn "bw_tcp 바이너리 없음"; return 1; }
     log "deploy 완료"
 }
 
@@ -399,17 +389,17 @@ fi
 do_setup() {
     do_deploy
     TRACER_POD=$(get_tracer_pod)
-    SERVER_IP=$(kubectl -n "${NS}" get pod tcp-server -o jsonpath='{.status.podIP}')
     mkdir -p "${RESULT_HOST}"
 
     setup_cpu_pin
     tracer_exec "{ uname -a; lscpu | head -20; free -h; } > /results/${LABEL}_sysinfo.txt"
 
-    log "TCP 서버 시작 (bw_tcp -s on ${SERVER_IP})"
-    server_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
+    log "TCP 서버 시작 (bw_tcp -s on localhost)"
+    work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
+    work_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
     sleep 2
 
-    log "서버 연결 확인..."
+    log "서버 연결 확인 (${SERVER_IP})..."
     local connected=false
     for i in $(seq 1 30); do
         if work_exec "${PIN_CMD} /tools/bin/lat_connect ${SERVER_IP} 2>/dev/null" &>/dev/null; then
@@ -420,7 +410,7 @@ do_setup() {
     if [[ "${connected}" != "true" ]]; then
         warn "서버 연결 실패 (${SERVER_IP}, 30초 타임아웃)"; return 1
     fi
-    log "서버 연결 확인 완료 (${SERVER_IP})"
+    log "서버 연결 확인 완료 (localhost)"
 
     log "===== Warm-up (${WARMUP_SEC}초) ====="
     work_exec "
@@ -503,7 +493,7 @@ do_latency() {
         flush_caches
     done
 
-    server_exec 'pkill -f "bw_tcp" 2>/dev/null || true' || true
+    work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
 
     log "===== Latency Cross-trial 통계 ====="
     local stats_iqr="${RESULT_HOST}/${LABEL}_latency_stats_iqr.csv"
@@ -531,6 +521,13 @@ do_throughput() {
 
     for rule_count in ${RULE_COUNTS}; do
         log "===== [Throughput] 규칙 수: ${rule_count} ====="
+
+        # bw_tcp 서버 재시작 (대량 연결 후 크래시 방지)
+        work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
+        sleep 1
+        work_exec 'nohup /tools/bin/bw_tcp -s >/dev/null 2>&1 &'
+        sleep 1
+
         [[ "${LABEL}" != "vanilla" ]] && load_rules "${rule_count}"
 
         for trial in $(seq 1 "${TRIALS}"); do
@@ -559,7 +556,7 @@ do_throughput() {
         flush_caches
     done
 
-    server_exec 'pkill -f "bw_tcp" 2>/dev/null || true' || true
+    work_exec 'pkill -x bw_tcp 2>/dev/null || true' || true
 
     log "===== Throughput Cross-trial 통계 ====="
     local stats_csv="${RESULT_HOST}/${LABEL}_throughput_stats.csv"

@@ -6,9 +6,8 @@
 #
 # 카테고리:
 #   1) 네트워크: tcp_connect (outbound) + inet_csk_accept (inbound)
-#   2) 소켓 I/O: tcp_sendmsg + tcp_recvmsg (per-request, HTTP 요청마다 발동)
-#   3) 프로세스: __x64_sys_execve
-#   4) 파일: security_file_open
+#   2) 프로세스: __x64_sys_execve
+#   3) 파일: security_file_open
 #
 # 적용: kubectl apply -f tetragon-policy.yaml
 # 제거: kubectl delete -f tetragon-policy.yaml
@@ -41,32 +40,6 @@ spec:
       returnArg:
         index: 0
         type: "sock"
-      selectors:
-        - matchNamespaces:
-            - namespace: Mnt
-              operator: NotIn
-              values: ["host_ns"]
-            - namespace: Pid
-              operator: NotIn
-              values: ["host_ns"]
-    - call: "tcp_sendmsg"
-      syscall: false
-      args:
-        - index: 0
-          type: "sock"
-      selectors:
-        - matchNamespaces:
-            - namespace: Mnt
-              operator: NotIn
-              values: ["host_ns"]
-            - namespace: Pid
-              operator: NotIn
-              values: ["host_ns"]
-    - call: "tcp_recvmsg"
-      syscall: false
-      args:
-        - index: 0
-          type: "sock"
       selectors:
         - matchNamespaces:
             - namespace: Mnt

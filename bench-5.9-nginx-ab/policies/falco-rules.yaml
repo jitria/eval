@@ -1,0 +1,71 @@
+###############################################################################
+# Falco Rules — 5.9 Nginx ab
+#
+# Nginx 컨테이너의 네트워크 연결, 프로세스 실행, 파일 접근을 감시.
+# KloudKnox/Tetragon과 동일한 3개 카테고리로 공정한 비교.
+#
+# 카테고리:
+#   1) 네트워크: accept/accept4 (inbound) + connect (outbound)
+#   2) 프로세스: execve/execveat
+#   3) 파일: open/openat/openat2
+#
+# 적용:
+#   helm upgrade falco falcosecurity/falco -n falco --reuse-values \
+#       --set-file "customRules.bench-rules\.yaml=falco-rules.yaml"
+###############################################################################
+- rule: Bench Nginx AB Inbound Connection
+  desc: Audit inbound connections to Nginx containers
+  condition: >
+    evt.type in (accept, accept4)
+    and container.id != host
+    and fd.sport = 80
+  output: >
+    Nginx inbound connection
+    (client=%fd.cip:%fd.cport server=%fd.sip:%fd.sport
+     exe=%proc.exepath command=%proc.cmdline
+     container=%container.name ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, nginx-ab]
+
+- rule: Bench Nginx AB Outbound Connection
+  desc: Audit outbound connections from Nginx containers
+  condition: >
+    evt.type = connect
+    and container.id != host
+    and k8s.ns.name = bench-nginx-ab
+    and fd.type = ipv4
+  output: >
+    Nginx outbound connection
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     dest=%fd.sip:%fd.sport container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, nginx-ab]
+
+- rule: Bench Nginx AB Process Audit
+  desc: Audit process activity in Nginx containers
+  condition: >
+    evt.type in (execve, execveat)
+    and container.id != host
+    and k8s.ns.name = bench-nginx-ab
+  output: >
+    Process in Nginx namespace
+    (user=%user.name command=%proc.cmdline exe=%proc.exepath
+     parent=%proc.pname container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, nginx-ab]
+
+- rule: Bench Nginx AB File Access
+  desc: Audit file access in Nginx containers
+  condition: >
+    evt.type in (open, openat, openat2)
+    and container.id != host
+    and k8s.ns.name = bench-nginx-ab
+  output: >
+    File access in Nginx namespace
+    (user=%user.name file=%fd.name dir=%fd.directory exe=%proc.exepath
+     command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, nginx-ab]

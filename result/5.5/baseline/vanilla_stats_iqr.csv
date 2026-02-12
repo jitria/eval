@@ -1,4 +1,4 @@
 label,syscall,trials,filter,avg_p50_ns,std_p50_ns,avg_p99_ns,std_p99_ns,avg_mean_ns,std_mean_ns,avg_count,std_count
-vanilla,execve,5,iqr,18023,532,21079,651,18000,543,2592,94
-vanilla,openat,5,iqr,1611,45,6365,112,2123,64,1123,15
-vanilla,connect,5,iqr,22773,56,23848,66,22761,60,11455,205
+vanilla,execve,1,iqr,3808,0,4154,0,3828,0,3555,0
+vanilla,openat,1,iqr,1268,0,1384,0,1278,0,3907,0
+vanilla,connect,1,iqr,24870,0,26221,0,24919,0,16129,0

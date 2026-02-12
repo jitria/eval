@@ -90,6 +90,9 @@ spec:
             - name: modules
               mountPath: /lib/modules
               readOnly: true
+            - name: kernel-headers
+              mountPath: /usr/src
+              readOnly: true
       volumes:
         - name: scripts
           configMap:
@@ -104,6 +107,9 @@ spec:
         - name: modules
           hostPath:
             path: /lib/modules
+        - name: kernel-headers
+          hostPath:
+            path: /usr/src
 ---
 apiVersion: v1
 kind: Pod

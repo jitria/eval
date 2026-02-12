@@ -1,0 +1,59 @@
+###############################################################################
+# KloudKnox Policy — 5.9 Nginx ab
+#
+# Nginx Pod의 네트워크 트래픽을 KloudKnox가 모니터링하도록 Audit 정책 적용.
+# cgroup-BPF 인라인 검증 경로에서의 오버헤드를 측정하기 위함.
+#
+# 적용: kubectl apply -f kloudknox-policy.yaml
+# 제거: kubectl delete -f kloudknox-policy.yaml
+###############################################################################
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-nginx-ab-network-audit
+  namespace: bench-nginx-ab
+spec:
+  selector:
+    app: nginx-ab
+  network:
+    - direction: ingress
+      ports:
+        - protocol: TCP
+          port: 80
+    - direction: egress
+      ipBlock:
+        cidr: 10.244.0.0/16
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-nginx-ab-process-audit
+  namespace: bench-nginx-ab
+spec:
+  selector:
+    app: nginx-ab
+  process:
+    - path: /usr/sbin/nginx
+    - dir: /usr/bin/
+      recursive: false
+  action: Audit
+---
+apiVersion: security.boanlab.com/v1
+kind: KloudKnoxPolicy
+metadata:
+  name: bench-nginx-ab-file-audit
+  namespace: bench-nginx-ab
+spec:
+  selector:
+    app: nginx-ab
+  file:
+    - dir: /etc/nginx/
+      recursive: true
+      readOnly: true
+    - dir: /var/log/nginx/
+      recursive: true
+    - dir: /usr/share/nginx/html/
+      recursive: true
+      readOnly: true
+  action: Audit

@@ -5,7 +5,7 @@
 # 중복 제거: execve는 1개로 통합.
 #
 # 카테고리:
-#   1) 네트워크: tcp_connect, inet_csk_accept, tcp_sendmsg, tcp_recvmsg, connect
+#   1) 네트워크: tcp_connect, inet_csk_accept, connect
 #   2) 프로세스: __x64_sys_execve (통합)
 #   3) 파일: security_file_open, __x64_sys_openat
 #
@@ -40,32 +40,6 @@ spec:
       returnArg:
         index: 0
         type: "sock"
-      selectors:
-        - matchNamespaces:
-            - namespace: Mnt
-              operator: NotIn
-              values: ["host_ns"]
-            - namespace: Pid
-              operator: NotIn
-              values: ["host_ns"]
-    - call: "tcp_sendmsg"
-      syscall: false
-      args:
-        - index: 0
-          type: "sock"
-      selectors:
-        - matchNamespaces:
-            - namespace: Mnt
-              operator: NotIn
-              values: ["host_ns"]
-            - namespace: Pid
-              operator: NotIn
-              values: ["host_ns"]
-    - call: "tcp_recvmsg"
-      syscall: false
-      args:
-        - index: 0
-          type: "sock"
       selectors:
         - matchNamespaces:
             - namespace: Mnt

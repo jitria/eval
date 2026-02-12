@@ -1,4 +1,4 @@
 label,syscall,trials,filter,avg_p50_ns,std_p50_ns,avg_p99_ns,std_p99_ns,avg_mean_ns,std_mean_ns,avg_count,std_count
-tetragon,execve,5,iqr,28546,150,33405,2318,28931,434,2271,130
-tetragon,openat,5,iqr,8475,134,21616,319,9820,198,1353,7
-tetragon,connect,5,iqr,30551,107,33923,3501,30761,434,9929,565
+tetragon,execve,1,iqr,9818,0,10964,0,9726,0,3227,0
+tetragon,openat,1,iqr,4551,0,7282,0,4624,0,2275,0
+tetragon,connect,1,iqr,31770,0,35604,0,31814,0,14839,0

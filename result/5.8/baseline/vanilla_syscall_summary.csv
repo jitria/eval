@@ -1,2 +1,0 @@
-label,trial,avg_agent_cpu,std_agent_cpu,avg_agent_mem,std_agent_mem,avg_node_cpu,std_node_cpu,avg_node_mem,std_node_mem,samples
-vanilla,1,0.00,0.00,0.0,0.0,1.3,0.2,1403,1,6

@@ -1,0 +1,90 @@
+###############################################################################
+# Tetragon TracingPolicy — 5.9 Nginx ab
+#
+# Nginx의 네트워크 연결/I·O, 프로세스 실행, 파일 접근을 트레이싱.
+# KloudKnox/Falco와 동일한 카테고리로 공정한 비교.
+#
+# 카테고리:
+#   1) 네트워크: tcp_connect (outbound) + inet_csk_accept (inbound)
+#   2) 프로세스: __x64_sys_execve
+#   3) 파일: security_file_open
+#
+# 적용: kubectl apply -f tetragon-policy.yaml
+# 제거: kubectl delete -f tetragon-policy.yaml
+###############################################################################
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-nginx-ab-network
+spec:
+  kprobes:
+    - call: "tcp_connect"
+      syscall: false
+      args:
+        - index: 0
+          type: "sock"
+      selectors:
+        - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
+            - namespace: Pid
+              operator: NotIn
+              values: ["host_ns"]
+    - call: "inet_csk_accept"
+      syscall: false
+      return: true
+      args:
+        - index: 0
+          type: "sock"
+      returnArg:
+        index: 0
+        type: "sock"
+      selectors:
+        - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
+            - namespace: Pid
+              operator: NotIn
+              values: ["host_ns"]
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-nginx-ab-process
+spec:
+  kprobes:
+    - call: "__x64_sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
+            - namespace: Pid
+              operator: NotIn
+              values: ["host_ns"]
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: bench-nginx-ab-file
+spec:
+  kprobes:
+    - call: "security_file_open"
+      syscall: false
+      args:
+        - index: 0
+          type: "file"
+      selectors:
+        - matchNamespaces:
+            - namespace: Mnt
+              operator: NotIn
+              values: ["host_ns"]
+            - namespace: Pid
+              operator: NotIn
+              values: ["host_ns"]

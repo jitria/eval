@@ -308,6 +308,25 @@ do_deploy() {
     log "bpftrace 설치 (${TRACER_POD})"
     tracer_exec 'apt-get update -qq && apt-get install -y -qq bpftrace >/dev/null 2>&1 && bpftrace --version'
 
+    # bpftrace JIT pre-warm (첫 컴파일이 느리므로 deploy 단계에서 미리 수행)
+    log "bpftrace JIT pre-warm 시작 (최대 60초 소요)"
+    for bt in trace_execve.bt trace_openat.bt trace_connect.bt; do
+        tracer_exec "
+bpftrace /scripts/${bt} > /tmp/prewarm.log 2>&1 &
+PID=\$!
+for _i in \$(seq 1 60); do
+    if grep -q 'Attaching' /tmp/prewarm.log 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
+kill -INT \$PID 2>/dev/null || true
+sleep 2
+kill -9 \$PID 2>/dev/null || true
+" || true
+    done
+    log "bpftrace JIT pre-warm 완료"
+
     # 서버 Pod IP
     SERVER_IP=$(kubectl -n "${NS}" get pod tcp-server -o jsonpath='{.status.podIP}')
     log "서버 Pod IP: ${SERVER_IP} (compute-node-1, same-node)"

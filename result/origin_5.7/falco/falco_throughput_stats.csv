@@ -1,0 +1,6 @@
+label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_latency_us,std_latency_us
+falco,10,3,1988.6,19.5,502.91,4.96
+falco,50,3,2005.0,2.7,498.76,0.69
+falco,100,3,2004.3,0.8,498.92,0.21
+falco,500,3,2103.2,129.1,477.27,29.22
+falco,1000,3,2003.6,2.0,499.12,0.50
