@@ -235,14 +235,20 @@ verify_policy() {
     local ok=false
     case "${LABEL}" in
         kloudknox)
-            for _i in $(seq 1 15); do
-                if kubectl -n "${NS}" get kloudknoxpolicy.security.boanlab.com -o name 2>/dev/null | grep -q .; then
+            for _i in $(seq 1 30); do
+                if kubectl -n "${NS}" get kloudknoxpolicy.security.boanlab.com bench-scale-0000 2>/dev/null | grep -q "bench-scale"; then
                     ok=true; break
                 fi
                 sleep 1
             done
             if [[ "${ok}" == "true" ]]; then
-                kubectl logs -n kloudknox -l boanlab.com/app=kloudknox --tail=10 2>/dev/null \
+                log "    KloudKnox 정책 리소스 확인 (bench-scale-0000 존재)"
+                # agent가 정책을 로드할 시간 대기
+                local kx_wait=$(( ${1:-10} / 10 ))
+                [[ ${kx_wait} -lt 3 ]] && kx_wait=3
+                [[ ${kx_wait} -gt 30 ]] && kx_wait=30
+                sleep "${kx_wait}"
+                kubectl logs -n kloudknox -l boanlab.com/app=kloudknox --tail=5 2>/dev/null \
                     | grep -qi "KloudKnoxPolicy" \
                     && log "    KloudKnox 에이전트 정책 로드 확인" \
                     || warn "    KloudKnox 에이전트 로그 확인 불가 (리소스는 존재)"
@@ -334,7 +340,13 @@ unload_rules() {
     case "${LABEL}" in
         kloudknox)
             kubectl delete -f "${RESULT_HOST}/rules/kloudknox_${count}.yaml" --ignore-not-found 2>/dev/null || true
-            sleep "${wait_sec}"
+            # 리소스 제거 확인 (단건 조회)
+            for _i in $(seq 1 60); do
+                if ! kubectl -n "${NS}" get kloudknoxpolicy.security.boanlab.com bench-scale-0000 2>/dev/null | grep -q "bench-scale"; then
+                    break
+                fi
+                sleep 2
+            done
             ;;
         falco)
             # 다음 load_rules에서 덮어쓰므로 별도 언로드 불필요

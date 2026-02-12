@@ -1,6 +1,5 @@
 label,rule_count,trials,avg_ops_sec,std_ops_sec,avg_latency_us,std_latency_us
-tetragon,10,3,71281.8,594.8,14.03,0.12
-tetragon,50,3,70939.2,625.7,14.10,0.12
-tetragon,100,3,71174.7,696.9,14.05,0.14
-tetragon,500,3,72426.9,279.9,13.81,0.05
-tetragon,1000,3,55935.8,137.4,17.88,0.04
+tetragon,10,3,26453.6,250.5,37.81,0.36
+tetragon,50,3,6877.2,21.6,145.41,0.46
+tetragon,100,3,3432.4,24.3,291.36,2.07
+tetragon,250,3,1368.8,5.3,730.57,2.85
