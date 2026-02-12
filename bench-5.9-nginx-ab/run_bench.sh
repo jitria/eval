@@ -34,7 +34,7 @@ AB_POD="ab-client"
 log()  { echo -e "\e[1;36m[5.9]\e[0m $*"; }
 warn() { echo -e "\e[1;33m[5.9]\e[0m $*"; }
 
-ab_exec() { kubectl -n "${NS}" exec "${AB_POD}" -- bash -c "$1" 2>&1; }
+ab_exec() { kubectl -n "${NS}" exec "${AB_POD}" -- bash -c "ulimit -n 65535; $1" 2>&1; }
 
 # ── 정책 적용 검증 ─────────────────────────────────────────────────
 verify_policy() {
@@ -157,7 +157,8 @@ remove_policy() {
 
 # ── ab 출력 파싱 ─────────────────────────────────────────────────────
 # 입력: ab 출력 파일
-# 출력: total_reqs,rps,mean_ms,p50_ms,p90_ms,p95_ms,p99_ms,max_ms,failed,transfer_kbps
+# 출력: total_reqs,rps,mean_us,p50_us,p90_us,p95_us,p99_us,max_us,failed,transfer_kbps
+# ab는 ms 단위로 출력 → μs 변환 (x1000)
 parse_ab_result() {
     local file="$1"
 
@@ -181,9 +182,9 @@ parse_ab_result() {
     /^ *99%/ { p99 = $2 }
     /^ *100%/ { max = $2 }
     END {
-        printf "%d,%.2f,%.3f,%d,%d,%d,%d,%d,%d,%.2f\n",
-            total_reqs+0, rps+0, mean_ms+0,
-            p50+0, p90+0, p95+0, p99+0, max+0,
+        printf "%d,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%d,%.2f\n",
+            total_reqs+0, rps+0, mean_ms*1000,
+            p50*1000, p90*1000, p95*1000, p99*1000, max*1000,
             failed+0, transfer_kbps+0
     }
     ' "${file}"
@@ -193,7 +194,7 @@ parse_ab_result() {
 compute_cross_trial_stats() {
     local summary_csv="$1" stats_csv="$2"
 
-    echo "label,concurrency,trials,avg_rps,std_rps,avg_mean_ms,std_mean_ms,avg_p50_ms,std_p50_ms,avg_p90_ms,std_p90_ms,avg_p95_ms,std_p95_ms,avg_p99_ms,std_p99_ms,avg_max_ms,std_max_ms,avg_transfer_kbps,std_transfer_kbps" > "${stats_csv}"
+    echo "label,concurrency,trials,avg_rps,std_rps,avg_mean_us,std_mean_us,avg_p50_us,std_p50_us,avg_p90_us,std_p90_us,avg_p95_us,std_p95_us,avg_p99_us,std_p99_us,avg_max_us,std_max_us,avg_transfer_kbps,std_transfer_kbps" > "${stats_csv}"
 
     for conns in ${CONN_LIST}; do
         grep "^${LABEL},${conns}," "${summary_csv}" 2>/dev/null | awk -F',' \
@@ -289,7 +290,7 @@ do_run() {
     do_setup
 
     local summary="${RESULT_HOST}/${LABEL}_ab_summary.csv"
-    echo "label,concurrency,trial,total_reqs,rps,mean_ms,p50_ms,p90_ms,p95_ms,p99_ms,max_ms,failed,transfer_kbps" > "${summary}"
+    echo "label,concurrency,trial,total_reqs,rps,mean_us,p50_us,p90_us,p95_us,p99_us,max_us,failed,transfer_kbps" > "${summary}"
 
     for trial in $(seq 1 "${TRIALS}"); do
         log "===== Trial ${trial}/${TRIALS} ====="
@@ -315,7 +316,7 @@ do_run() {
                 p50_d=$(echo "${stats}" | cut -d, -f4)
                 p99_d=$(echo "${stats}" | cut -d, -f7)
                 failed_d=$(echo "${stats}" | cut -d, -f9)
-                log "    RPS=${rps_d}  mean=${mean_d}ms  p50=${p50_d}ms  p99=${p99_d}ms  failed=${failed_d}"
+                log "    RPS=${rps_d}  mean=${mean_d}μs  p50=${p50_d}μs  p99=${p99_d}μs  failed=${failed_d}"
             else
                 warn "    결과 없음"
             fi

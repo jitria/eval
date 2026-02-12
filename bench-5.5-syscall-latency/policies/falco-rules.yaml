@@ -1,17 +1,21 @@
 ###############################################################################
 # Falco Rules — 5.5 Syscall Latency
 #
-# execve, openat, connect syscall을 Falco가 감시하도록 커스텀 룰 정의.
-# 모든 컨테이너 대상으로 이벤트 평가를 수행하여 오버헤드 측정.
+# 컨테이너 대상으로 주요 syscall/이벤트를 감시하여 오버헤드 측정.
+#
+# 카테고리:
+#   1) 프로세스: execve, execveat, exit, exit_group
+#   2) 파일: open, openat, openat2, close
+#   3) 네트워크: connect, bind, accept/accept4, sendto/sendmsg, recvfrom/recvmsg
 #
 # 적용:
 #   helm upgrade falco falcosecurity/falco -n falco --reuse-values \
 #       --set-file "customRules.bench-rules\.yaml=falco-rules.yaml"
-# 또는 설치 시:
-#   bash deploy-falco.sh install-with-rules falco-rules.yaml
 ###############################################################################
-- rule: Bench Syscall Execve Audit
-  desc: Audit all process executions in containers for syscall latency measurement
+
+# ── 프로세스 (execve, execveat → security_bprm_check 포함) ──────────
+- rule: Bench Process Exec Audit
+  desc: Audit process executions in containers
   condition: >
     evt.type in (execve, execveat)
     and container.id != host
@@ -23,8 +27,22 @@
   priority: NOTICE
   tags: [bench, syscall-latency]
 
-- rule: Bench Syscall Openat Audit
-  desc: Audit all file open operations in containers for syscall latency measurement
+# ── 프로세스 종료 (exit, exit_group → sched_process_exit 포함) ──────
+- rule: Bench Process Exit Audit
+  desc: Audit process exits in containers
+  condition: >
+    evt.type in (exit, exit_group)
+    and container.id != host
+  output: >
+    Process exited
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]
+
+# ── 파일 열기 (open, openat, openat2 → security_file_open 포함) ─────
+- rule: Bench File Open Audit
+  desc: Audit file open operations in containers
   condition: >
     evt.type in (open, openat, openat2)
     and container.id != host
@@ -36,8 +54,22 @@
   priority: NOTICE
   tags: [bench, syscall-latency]
 
-- rule: Bench Syscall Connect Audit
-  desc: Audit all outbound network connections in containers for syscall latency measurement
+# ── 파일 닫기 (close) ───────────────────────────────────────────────
+- rule: Bench File Close Audit
+  desc: Audit file close operations in containers
+  condition: >
+    evt.type = close
+    and container.id != host
+  output: >
+    File closed
+    (user=%user.name exe=%proc.exepath container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]
+
+# ── 네트워크 연결 (connect → inet_stream_connect 포함) ──────────────
+- rule: Bench Net Connect Audit
+  desc: Audit outbound network connections in containers
   condition: >
     evt.type = connect
     and container.id != host
@@ -46,6 +78,58 @@
     Network connect
     (user=%user.name command=%proc.cmdline exe=%proc.exepath
      dest=%fd.sip:%fd.sport container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]
+
+# ── 소켓 바인드 (bind → inet_bind 포함) ─────────────────────────────
+- rule: Bench Net Bind Audit
+  desc: Audit socket bind operations in containers
+  condition: >
+    evt.type = bind
+    and container.id != host
+  output: >
+    Socket bind
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]
+
+# ── 소켓 수락 (accept, accept4 → inet_csk_accept 포함) ─────────────
+- rule: Bench Net Accept Audit
+  desc: Audit socket accept operations in containers
+  condition: >
+    evt.type in (accept, accept4)
+    and container.id != host
+  output: >
+    Socket accept
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]
+
+# ── UDP 송신 (sendto, sendmsg → udp_sendmsg 포함) ──────────────────
+- rule: Bench UDP Send Audit
+  desc: Audit UDP send operations in containers
+  condition: >
+    evt.type in (sendto, sendmsg)
+    and container.id != host
+  output: >
+    UDP send
+    (user=%user.name command=%proc.cmdline container=%container.name
+     ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: NOTICE
+  tags: [bench, syscall-latency]
+
+# ── UDP 수신 (recvfrom, recvmsg → udp_recvmsg 포함) ────────────────
+- rule: Bench UDP Recv Audit
+  desc: Audit UDP receive operations in containers
+  condition: >
+    evt.type in (recvfrom, recvmsg)
+    and container.id != host
+  output: >
+    UDP recv
+    (user=%user.name command=%proc.cmdline container=%container.name
      ns=%k8s.ns.name pod=%k8s.pod.name)
   priority: NOTICE
   tags: [bench, syscall-latency]

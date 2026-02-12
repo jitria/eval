@@ -111,7 +111,7 @@ compute_stats() {
             p50_idx = int(fn * 0.50); if (p50_idx < 1) p50_idx = 1
             p99_idx = int(fn * 0.99); if (p99_idx < 1) p99_idx = 1
 
-            printf "%d,%d,%d,%d,%d,%d,%d\n", avg, fa[p50_idx], fa[p99_idx], fa[1], fa[fn], fn, stddev
+            printf "%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f\n", avg/1000, fa[p50_idx]/1000, fa[p99_idx]/1000, fa[1]/1000, fa[fn]/1000, fn, stddev/1000
         }' "${sorted}"
     else
         awk '
@@ -129,7 +129,7 @@ compute_stats() {
             p50_idx = int(n * 0.50); if (p50_idx < 1) p50_idx = 1
             p99_idx = int(n * 0.99); if (p99_idx < 1) p99_idx = 1
 
-            printf "%d,%d,%d,%d,%d,%d,%d\n", avg, a[p50_idx], a[p99_idx], a[1], a[n], n, stddev
+            printf "%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f\n", avg/1000, a[p50_idx]/1000, a[p99_idx]/1000, a[1]/1000, a[n]/1000, n, stddev/1000
         }' "${sorted}"
     fi
 }
@@ -138,7 +138,7 @@ compute_stats() {
 compute_cross_trial_stats() {
     local summary_csv="$1" stats_csv="$2" filter="$3"
 
-    echo "label,rule_count,trials,filter,avg_p50_ns,std_p50_ns,avg_p99_ns,std_p99_ns,avg_mean_ns,std_mean_ns,avg_count,std_count" > "${stats_csv}"
+    echo "label,rule_count,trials,filter,avg_p50_us,std_p50_us,avg_p99_us,std_p99_us,avg_mean_us,std_mean_us,avg_count,std_count" > "${stats_csv}"
 
     for rc in ${RULE_COUNTS}; do
         grep "^${LABEL},${rc},[0-9]*,${filter}," "${summary_csv}" 2>/dev/null | awk -F',' \
@@ -494,7 +494,7 @@ do_latency() {
     do_setup
 
     local summary="${RESULT_HOST}/${LABEL}_latency.csv"
-    echo "label,rule_count,trial,filter,avg_ns,p50_ns,p99_ns,min_ns,max_ns,count,stddev_ns" > "${summary}"
+    echo "label,rule_count,trial,filter,avg_us,p50_us,p99_us,min_us,max_us,count,stddev_us" > "${summary}"
 
     for rule_count in ${RULE_COUNTS}; do
         log "===== [Latency] 규칙 수: ${rule_count} ====="
@@ -521,7 +521,7 @@ do_latency() {
                 i_p99=$(echo "${iqr_stats}" | cut -d, -f3)
                 i_cnt=$(echo "${iqr_stats}" | cut -d, -f6)
                 i_sd=$(echo "${iqr_stats}"  | cut -d, -f7)
-                log "    rules=${rule_count} trial=${trial}: avg=${i_avg}±${i_sd}ns  p50=${i_p50}ns  p99=${i_p99}ns  (n=${i_cnt})"
+                log "    rules=${rule_count} trial=${trial}: avg=${i_avg}±${i_sd}μs  p50=${i_p50}μs  p99=${i_p99}μs  (n=${i_cnt})"
             else
                 warn "    결과 없음"
             fi
